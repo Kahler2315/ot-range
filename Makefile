@@ -64,9 +64,11 @@ up:
 	docker build -t ot-range-process-sim -f process_sim/Dockerfile .
 	docker build -t ot-range-openplc -f plc/openplc/Dockerfile plc/openplc
 	docker build -t ot-range-openplc-configure -f process_sim/Dockerfile .
+	docker build -t ot-range-hmi -f hmi/Dockerfile .
 	$(COMPOSE) up --wait
 	@echo
 	@echo "OpenPLC web UI: http://localhost:8080 (openplc / openplc)"
+	@echo "HMI (operator display): http://localhost:8090"
 	@echo "SECURITY.md applies: simulated environment only."
 
 down:

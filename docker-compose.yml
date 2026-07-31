@@ -10,9 +10,10 @@
 # directly instead of through `make up`, build those tags first or add
 # `--build` back (only works if your buildx is new enough).
 #
-# Web UI: http://localhost:8080 (openplc / openplc — see SECURITY.md,
-# this is a simulated environment only, never expose this port beyond
-# loopback on a real deployment).
+# OpenPLC web UI: http://localhost:8080 (openplc / openplc — see
+# SECURITY.md, this is a simulated environment only, never expose this
+# port beyond loopback on a real deployment).
+# HMI (operator display):     http://localhost:8090
 #
 # openplc-configure is a one-shot job: it waits for OpenPLC's webserver,
 # uploads plc/logic/cedar_hollow.st, compiles it, registers process-sim
@@ -58,6 +59,21 @@ services:
       openplc:
         condition: service_healthy
     restart: "no"
+
+  hmi:
+    image: ot-range-hmi
+    build:
+      context: .
+      dockerfile: hmi/Dockerfile
+    environment:
+      OPENPLC_HOST: openplc
+      OPENPLC_PORT: "502"
+    ports:
+      - "127.0.0.1:8090:8090"
+    networks: [ot-range]
+    depends_on:
+      openplc-configure:
+        condition: service_completed_successfully
 
 networks:
   ot-range:

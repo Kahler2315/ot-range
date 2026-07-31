@@ -36,6 +36,10 @@ known-first-party = ["common", "process_sim", "sensor", "tools", "attacker", "te
 # see docs/openplc-integration.md. E501: the inline nosemgrep rule IDs
 # that suppress the corresponding semgrep finding are unavoidably long.
 "tools/openplc_configure.py" = ["S105", "E501"]
+# 0.0.0.0 is correct: binds inside the container's own network namespace
+# so docker-compose can publish/route to it. See process_sim/Dockerfile
+# for the same reasoning.
+"hmi/app.py" = ["S104"]
 
 [tool.bandit]
 exclude_dirs = [".venv", "venv", "tests"]

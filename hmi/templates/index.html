@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Cedar Hollow Pump Station — HMI</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      background: #1a2332; color: #d8e1e8; font-family: 'Segoe UI', Arial, sans-serif;
+      margin: 0; padding: 24px;
+    }
+    h1 { font-size: 1.4rem; font-weight: 600; margin: 0 0 4px; color: #fff; }
+    .subtitle { color: #7f93a8; font-size: 0.85rem; margin-bottom: 20px; }
+    .disconnected-banner {
+      display: none; background: #7a1f1f; color: #fff; padding: 10px 16px;
+      border-radius: 6px; margin-bottom: 16px; font-weight: 600;
+    }
+    .layout { display: flex; gap: 24px; flex-wrap: wrap; }
+    .tank-panel {
+      background: #202b3d; border-radius: 10px; padding: 20px; width: 200px;
+      display: flex; flex-direction: column; align-items: center;
+    }
+    .tank-shell {
+      width: 100px; height: 260px; border: 3px solid #4a5d75; border-radius: 6px;
+      position: relative; overflow: hidden; background: #131b28;
+    }
+    .tank-fill {
+      position: absolute; bottom: 0; left: 0; width: 100%; background: #2f8fd6;
+      transition: height 0.4s ease, background 0.4s ease;
+    }
+    .tank-fill.high { background: #d68f2f; }
+    .tank-fill.alarm { background: #cc3232; }
+    .tank-label { margin-top: 12px; font-size: 1.6rem; font-weight: 700; color: #fff; }
+    .tank-sub { color: #7f93a8; font-size: 0.8rem; }
+    .float-marks {
+      position: absolute; left: -18px; width: 6px; height: 2px; background: #ffb703;
+    }
+    .grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+      gap: 14px; flex: 1;
+    }
+    .card {
+      background: #202b3d; border-radius: 10px; padding: 14px 16px;
+      border-left: 4px solid #4a5d75;
+    }
+    .card.status-run { border-left-color: #2fbf71; }
+    .card.status-fault { border-left-color: #cc3232; }
+    .card-title { font-size: 0.78rem; color: #7f93a8; text-transform: uppercase; letter-spacing: 0.04em; }
+    .card-value { font-size: 1.5rem; font-weight: 700; margin-top: 4px; color: #fff; }
+    .card-unit { font-size: 0.9rem; color: #7f93a8; font-weight: 400; }
+    .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; background: #4a5d75; }
+    .dot.on { background: #2fbf71; }
+    .dot.fault { background: #cc3232; }
+    .alarm-banner {
+      display: none; background: #cc3232; color: #fff; padding: 14px 20px; border-radius: 8px;
+      font-weight: 700; font-size: 1.1rem; margin-bottom: 16px; letter-spacing: 0.03em;
+      animation: pulse 1.2s infinite;
+    }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.75; } }
+    .mode-badge {
+      display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 0.75rem;
+      font-weight: 700; letter-spacing: 0.03em;
+    }
+    .mode-auto { background: #204e35; color: #6fe39a; }
+    .mode-manual { background: #5c3a10; color: #f2b25c; }
+  </style>
+</head>
+<body>
+  <h1>Cedar Hollow Pump Station</h1>
+  <div class="subtitle">Simulated environment — see SECURITY.md. Reading OpenPLC's live Modbus slave interface.</div>
+
+  <div class="disconnected-banner" id="disconnected-banner">⚠ NOT CONNECTED TO PLC</div>
+  <div class="alarm-banner" id="alarm-banner">⚠ HIGH LEVEL ALARM</div>
+
+  <div class="layout">
+    <div class="tank-panel">
+      <div class="tank-shell">
+        <div class="tank-fill" id="tank-fill" style="height: 0%"></div>
+      </div>
+      <div class="tank-label" id="level-label">—%</div>
+      <div class="tank-sub">LT-101 Tank Level</div>
+    </div>
+
+    <div class="grid">
+      <div class="card" id="pump-card">
+        <div class="card-title">Fill Pump P-101</div>
+        <div class="card-value"><span class="dot" id="pump-dot"></span><span id="pump-state">—</span></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Control Mode</div>
+        <div class="card-value"><span class="mode-badge" id="mode-badge">—</span></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Discharge Flow FT-201</div>
+        <div class="card-value"><span id="flow-value">—</span><span class="card-unit"> L/min</span></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Chlorine Residual AIT-301</div>
+        <div class="card-value"><span id="chlorine-value">—</span><span class="card-unit"> mg/L</span></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Pump Current IT-101</div>
+        <div class="card-value"><span id="current-value">—</span><span class="card-unit"> A</span></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Discharge Valve V-201</div>
+        <div class="card-value"><span class="dot" id="valve-dot"></span><span id="valve-state">—</span></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Chlorine Dosing CL-301</div>
+        <div class="card-value"><span class="dot" id="cl-dot"></span><span id="cl-state">—</span></div>
+      </div>
+      <div class="card">
+        <div class="card-title">High-High Float (LSHH)</div>
+        <div class="card-value"><span class="dot" id="lshh-dot"></span><span id="lshh-state">—</span></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Low-Low Float (LSLL)</div>
+        <div class="card-value"><span class="dot" id="lsll-dot"></span><span id="lsll-state">—</span></div>
+      </div>
+      <div class="card" id="fault-card">
+        <div class="card-title">Pump Fault</div>
+        <div class="card-value"><span class="dot" id="fault-dot"></span><span id="fault-state">—</span></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Setpoints (Hi / Lo / Alarm)</div>
+        <div class="card-value" style="font-size: 1.1rem"><span id="setpoints-value">—</span><span class="card-unit"> %</span></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function onOff(el, on, faultClass) {
+      el.className = 'dot' + (on ? (faultClass ? ' fault' : ' on') : '');
+    }
+
+    async function poll() {
+      let s;
+      try {
+        const resp = await fetch('/api/state');
+        s = await resp.json();
+      } catch {
+        document.getElementById('disconnected-banner').style.display = 'block';
+        return setTimeout(poll, 1000);
+      }
+
+      document.getElementById('disconnected-banner').style.display = s.connected ? 'none' : 'block';
+      if (!s.connected) return setTimeout(poll, 1000);
+
+      const fill = document.getElementById('tank-fill');
+      fill.style.height = Math.min(100, s.level_pct) + '%';
+      fill.className = 'tank-fill' + (s.lshh ? ' alarm' : (s.level_pct >= s.sp_alm_hh ? ' high' : ''));
+      document.getElementById('level-label').textContent = s.level_pct.toFixed(1) + '%';
+
+      document.getElementById('alarm-banner').style.display = s.alarm ? 'block' : 'none';
+
+      document.getElementById('pump-state').textContent = s.pump_fb ? 'RUNNING' : 'STOPPED';
+      onOff(document.getElementById('pump-dot'), s.pump_fb, false);
+
+      const badge = document.getElementById('mode-badge');
+      badge.textContent = s.mode_auto ? 'AUTO' : 'MANUAL';
+      badge.className = 'mode-badge ' + (s.mode_auto ? 'mode-auto' : 'mode-manual');
+
+      document.getElementById('flow-value').textContent = s.flow_lpm.toFixed(1);
+      document.getElementById('chlorine-value').textContent = s.chlorine_mgl.toFixed(2);
+      document.getElementById('current-value').textContent = s.pump_current_a.toFixed(1);
+
+      document.getElementById('valve-state').textContent = s.valve_open ? 'OPEN' : 'CLOSED';
+      onOff(document.getElementById('valve-dot'), s.valve_open, false);
+
+      document.getElementById('cl-state').textContent = s.cl_run ? 'RUNNING' : 'STOPPED';
+      onOff(document.getElementById('cl-dot'), s.cl_run, false);
+
+      document.getElementById('lshh-state').textContent = s.lshh ? 'TRIPPED' : 'NORMAL';
+      onOff(document.getElementById('lshh-dot'), s.lshh, s.lshh);
+
+      document.getElementById('lsll-state').textContent = s.lsll ? 'TRIPPED' : 'NORMAL';
+      onOff(document.getElementById('lsll-dot'), s.lsll, s.lsll);
+
+      document.getElementById('fault-state').textContent = s.pump_fault ? 'FAULTED' : 'OK';
+      onOff(document.getElementById('fault-dot'), s.pump_fault, s.pump_fault);
+      document.getElementById('fault-card').className = 'card' + (s.pump_fault ? ' status-fault' : '');
+      document.getElementById('pump-card').className = 'card' + (s.pump_fb ? ' status-run' : '');
+
+      document.getElementById('setpoints-value').textContent =
+        s.sp_lvl_hi.toFixed(1) + ' / ' + s.sp_lvl_lo.toFixed(1) + ' / ' + s.sp_alm_hh.toFixed(1);
+
+      setTimeout(poll, 1000);
+    }
+    poll();
+  </script>
+</body>
+</html>

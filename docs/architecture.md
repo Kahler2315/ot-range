@@ -248,8 +248,26 @@ Applies to every commit, not just before release:
 
 ## Open questions
 
-1. **FUXA vs. Node-RED** — build a throwaway HMI in each at M2 and pick
-   on feel. FUXA is more authentic; Node-RED is faster.
+1. **FUXA vs. Node-RED — evaluated, not yet built; shipping a minimal
+   custom HMI for M2 instead, for now.** FUXA is still the better
+   long-term choice on paper: official image (`frangoteam/fuxa`, 166k
+   Docker pulls, MIT, 4.7k GitHub stars, actively maintained), a
+   purpose-built SCADA product, native Modbus TCP, web-based editor,
+   even a built-in historian useful for M3. But building its dashboard
+   requires either driving its SVG canvas editor visually or
+   hand-authoring its project format — a two-part system of binding
+   metadata (`hmi.views[].items`) plus raw SVG markup
+   (`hmi.views[].svgcontent`) that the frontend hooks into by
+   structural convention I hadn't reverse-engineered. Doing either
+   blind, without the ability to see rendered output, risks shipping
+   something silently broken. Also found along the way: this FUXA
+   version doesn't bundle Modbus support — it requires installing a
+   driver via its Plugins system first, another unverified step.
+   **Decision:** build a small purpose-written HMI now (`hmi/`, plain
+   Flask + HTML/CSS, polls OpenPLC's slave interface directly) so M2
+   has a real, verified, working dashboard, and revisit FUXA in a
+   session with actual visual/screenshot access to the editor — the
+   research above is still the starting point when that happens.
 2. ~~Does OpenPLC's Modbus server expose everything needed for S06~~ —
    **resolved.** No — program download is HTTP, not Modbus, and that
    turned out to be the more realistic attack surface anyway. See
