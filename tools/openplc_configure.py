@@ -46,7 +46,10 @@ class OpenPLCClient:
         self.base_url = base_url.rstrip("/")
         self.session = requests.Session()
 
-    def login(self, username: str = DEFAULT_USERNAME, password: str = DEFAULT_PASSWORD) -> None:
+    # OpenPLC's actual shipped default credential, not a secret; see docs/openplc-integration.md
+    def login(  # nosemgrep: python.lang.security.audit.hardcoded-password-default-argument.hardcoded-password-default-argument
+        self, username: str = DEFAULT_USERNAME, password: str = DEFAULT_PASSWORD
+    ) -> None:
         resp = self.session.post(
             f"{self.base_url}/login",
             data={"username": username, "password": password},
@@ -151,7 +154,8 @@ class OpenPLCClient:
         self.session.get(f"{self.base_url}/stop_plc")
 
 
-def bring_up_cedar_hollow(
+# OpenPLC's actual shipped default credential, not a secret; see docs/openplc-integration.md
+def bring_up_cedar_hollow(  # nosemgrep: python.lang.security.audit.hardcoded-password-default-argument.hardcoded-password-default-argument
     base_url: str,
     st_path: str,
     field_host: str,

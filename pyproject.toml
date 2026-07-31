@@ -33,8 +33,9 @@ known-first-party = ["common", "process_sim", "sensor", "tools", "attacker", "te
 "tests/docker_harness.py" = ["S603", "S607", "S310"]
 "tests/test_openplc_integration.py" = ["S603", "S607"]
 # OpenPLC's shipped default credential (openplc/openplc), not a secret —
-# see docs/openplc-integration.md.
-"tools/openplc_configure.py" = ["S105"]
+# see docs/openplc-integration.md. E501: the inline nosemgrep rule IDs
+# that suppress the corresponding semgrep finding are unavoidably long.
+"tools/openplc_configure.py" = ["S105", "E501"]
 
 [tool.bandit]
 exclude_dirs = [".venv", "venv", "tests"]
