@@ -1,0 +1,29 @@
+[project]
+name = "ot-range"
+version = "0.1.0"
+description = "Open-source OT/ICS cyber range simulating a municipal water pump station over Modbus TCP"
+readme = "README.md"
+license = { text = "Apache-2.0" }
+requires-python = ">=3.11"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["common", "process_sim", "tools", "attacker", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "S", "C4", "SIM"]
+ignore = [
+  "S101", # assert is fine in tests
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101"]
+
+[tool.bandit]
+exclude_dirs = [".venv", "venv", "tests"]
+skips = []
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"

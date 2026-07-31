@@ -1,0 +1,107 @@
+# Modbus point map — single source of truth.
+#
+# Every component (process sim, Modbus slave, CLI, HMI, historian,
+# detection rules, attack scripts) reads addressing from this file.
+# Never hardcode a register address anywhere else in the repo.
+#
+# Addressing follows traditional Modbus convention (5-digit, 1-indexed per
+# table): coils 00001+, discrete inputs 10001+, input registers 30001+,
+# holding registers 40001+. common/pointmap.py converts these to the
+# zero-indexed offsets pymodbus's datastore expects.
+#
+# `scale` divides the raw 16-bit register value to get engineering units,
+# e.g. a raw value of 6500 with scale 100 means 65.00 (%).
+
+meta:
+  process_name: "Cedar Hollow Pump Station"
+  protocol: "Modbus TCP"
+
+coils:
+  - addr: 1
+    tag: P101_RUN
+    description: "Fill pump run command"
+    default: false
+  - addr: 2
+    tag: V201_OPEN
+    description: "Discharge valve open"
+    default: true
+  - addr: 3
+    tag: CL301_RUN
+    description: "Chlorine dosing pump run"
+    default: true
+  - addr: 4
+    tag: ALARM_HORN
+    description: "Audible alarm"
+    default: false
+  - addr: 5
+    tag: MODE_AUTO
+    description: "Control mode: 1 = auto, 0 = manual"
+    default: true
+
+discrete_inputs:
+  - addr: 1
+    tag: LSHH_101
+    description: "High-high level float switch (hardwired, independent of analog transmitter)"
+  - addr: 2
+    tag: LSLL_101
+    description: "Low-low level float switch (hardwired)"
+  - addr: 3
+    tag: P101_FB
+    description: "Pump running feedback"
+  - addr: 4
+    tag: P101_FAULT
+    description: "Pump fault (overload latch)"
+
+input_registers:
+  - addr: 1
+    tag: LT_101
+    description: "Tank level"
+    unit: "%"
+    scale: 100
+  - addr: 2
+    tag: FT_201
+    description: "Discharge flow"
+    unit: "L/min"
+    scale: 10
+  - addr: 3
+    tag: AIT_301
+    description: "Chlorine residual"
+    unit: "mg/L"
+    scale: 100
+  - addr: 4
+    tag: IT_101
+    description: "Pump motor current"
+    unit: "A"
+    scale: 10
+
+holding_registers:
+  - addr: 1
+    tag: SP_LVL_HI
+    description: "Pump stop level"
+    unit: "%"
+    scale: 100
+    default: 85.0
+  - addr: 2
+    tag: SP_LVL_LO
+    description: "Pump start level"
+    unit: "%"
+    scale: 100
+    default: 40.0
+  - addr: 3
+    tag: SP_CL_DOSE
+    description: "Chlorine dose setpoint"
+    unit: "mg/L"
+    scale: 100
+    default: 1.20
+  - addr: 4
+    tag: SP_ALM_HH
+    description: "High-high alarm limit"
+    unit: "%"
+    scale: 100
+    default: 95.0
+  - addr: 5
+    tag: SP_P101_SPD
+    description: "Pump speed command"
+    unit: "%"
+    scale: 100
+    default: 75.0

@@ -1,0 +1,7 @@
+# Pinned to 3.6.9 deliberately: pymodbus 3.14 renamed ModbusSlaveContext ->
+# ModbusDeviceContext and removed the old datastore accessors in favour of
+# SimData/SimDevice, and 4.0 will make the new API mandatory. Most
+# documentation and StackOverflow answers students will find still target
+# the pre-4.0 API. Tracked as a known limitation in docs/limitations.md.
+pymodbus==3.6.9
+pyyaml==6.0.2
