@@ -1,0 +1,13 @@
+# Address space the attacker tooling is permitted to target.
+#
+# This file can only NARROW what is already structurally permitted
+# (loopback, RFC 1918, RFC 5737 documentation ranges). Adding a public
+# address here does not work — attacker/common/scope.py refuses it
+# regardless, and that ceiling is not configurable.
+#
+# Default is loopback only, matching the M1 stack where the simulator
+# binds to 127.0.0.1. Widen to the Docker network range when the
+# containerised stack lands (M4).
+
+allowed_networks:
+  - 127.0.0.0/8

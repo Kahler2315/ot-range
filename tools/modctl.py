@@ -13,9 +13,10 @@ import os
 import sys
 import time
 
+from pymodbus.client import ModbusTcpClient
+
 from common.pointmap import Point, PointMap
 from common.pointmap import load as load_pointmap
-from pymodbus.client import ModbusTcpClient
 
 DEFAULT_HOST = os.environ.get("MODBUS_BIND_HOST", "127.0.0.1")
 DEFAULT_PORT = int(os.environ.get("MODBUS_BIND_PORT", "5502"))

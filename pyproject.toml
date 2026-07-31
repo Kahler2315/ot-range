@@ -9,7 +9,7 @@ requires-python = ">=3.11"
 [tool.ruff]
 line-length = 100
 target-version = "py311"
-src = ["common", "process_sim", "tools", "attacker", "tests"]
+src = ["."]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "S", "C4", "SIM"]
@@ -17,8 +17,13 @@ ignore = [
   "S101", # assert is fine in tests
 ]
 
+[tool.ruff.lint.isort]
+known-first-party = ["common", "process_sim", "sensor", "tools", "attacker", "tests"]
+
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["S101"]
+# The test harness launches repo modules with sys.executable and
+# literal argument lists — no shell, no external input.
+"tests/harness.py" = ["S603"]
 
 [tool.bandit]
 exclude_dirs = [".venv", "venv", "tests"]
@@ -27,3 +32,6 @@ skips = []
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"
+markers = [
+  "e2e: end-to-end attack/detection tests that start real processes and sockets",
+]

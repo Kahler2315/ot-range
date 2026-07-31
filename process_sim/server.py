@@ -19,8 +19,6 @@ import asyncio
 import logging
 import os
 
-from common.pointmap import PointMap
-from common.pointmap import load as load_pointmap
 from pymodbus.datastore import (
     ModbusSequentialDataBlock,
     ModbusServerContext,
@@ -28,6 +26,8 @@ from pymodbus.datastore import (
 )
 from pymodbus.server import ModbusTcpServer
 
+from common.pointmap import PointMap
+from common.pointmap import load as load_pointmap
 from process_sim.plant import Plant, PlantState
 
 LOG = logging.getLogger("ot_range.server")

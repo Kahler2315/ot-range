@@ -1,0 +1,15 @@
+thresholds:
+  point_enumeration_addresses: 12
+  unit_id_sweep_count: 3
+  exception_rate: 0.2
+  exception_min_responses: 10
+allowed:
+- source: 127.0.0.1
+  unit: 0
+  functions:
+  - READ_COILS
+  - READ_DISCRETE_INPUTS
+  - READ_HOLDING_REGISTERS
+  - READ_INPUT_REGISTERS
+  address_min: 0
+  address_max: 4

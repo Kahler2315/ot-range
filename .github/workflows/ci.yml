@@ -48,10 +48,15 @@ jobs:
             p/security-audit
 
       - name: Unit tests
-        run: pytest
+        run: pytest -m "not e2e"
 
       - name: Smoke test
         run: bash tests/smoke.sh
+
+      # The differentiator: every attack scenario is run for real and its
+      # detection asserted to fire, so a rule cannot silently rot.
+      - name: Attack/detection regression tests
+        run: pytest -m e2e
 
       - name: Generate SBOM
         uses: anchore/sbom-action@v0
