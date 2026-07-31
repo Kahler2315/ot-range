@@ -32,10 +32,31 @@ DEFAULT_USERNAME = "openplc"
 DEFAULT_PASSWORD = "openplc"  # nosec B105 -- OpenPLC's actual shipped default, not a secret
 
 _UPLOADED_FILENAME_RE = re.compile(r"value='([0-9]+\.st)' id='prog_file'")
+_DEVICE_ROW_RE = re.compile(r"modbus-edit-device\?table_id=(\d+)'\">\s*<td>([^<]*)</td>")
 
 
 class OpenPLCConfigError(Exception):
     pass
+
+
+def _retry_on_db_lock(fn, attempts: int = 5, base_delay_s: float = 0.5):
+    """OpenPLC's webserver is a single SQLite file under a Flask dev
+    server — concurrent-ish writes (e.g. delete-then-add during
+    idempotent re-configure) occasionally hit 'database is locked'.
+    That's a transient SQLite contention error, not a real failure;
+    retrying with backoff is the standard fix, not worth deep
+    root-causing.
+    """
+    last_exc: Exception | None = None
+    for attempt in range(attempts):
+        try:
+            return fn()
+        except OpenPLCConfigError as exc:
+            if "database is locked" not in str(exc).lower():
+                raise
+            last_exc = exc
+            time.sleep(base_delay_s * (attempt + 1))
+    raise last_exc
 
 
 class OpenPLCClient:
@@ -120,32 +141,56 @@ class OpenPLCClient:
         pause_ms: int = 0,
     ) -> None:
         ip = socket.gethostbyname(host)  # see module docstring — OpenPLC needs a literal IP
-        resp = self.session.post(
-            f"{self.base_url}/add-modbus-device",
-            data={
-                "device_name": name,
-                "device_protocol": "TCP",
-                "device_id": str(slave_id),
-                "device_ip": ip,
-                "device_port": str(port),
-                "di_start": str(di_start),
-                "di_size": str(di_size),
-                "do_start": str(coil_start),
-                "do_size": str(coil_size),
-                "ai_start": str(ir_start),
-                "ai_size": str(ir_size),
-                "aor_start": str(hr_start),
-                "aor_size": str(hr_size),
-                "aow_start": str(hr_start),
-                "aow_size": str(hr_size),
-                "device_pause": str(pause_ms),
-            },
-            allow_redirects=False,
-        )
-        if resp.status_code != 302:
-            raise OpenPLCConfigError(
-                f"add-modbus-device failed: HTTP {resp.status_code}\n{resp.text[:500]}"
+
+        def _do_add() -> None:
+            resp = self.session.post(
+                f"{self.base_url}/add-modbus-device",
+                data={
+                    "device_name": name,
+                    "device_protocol": "TCP",
+                    "device_id": str(slave_id),
+                    "device_ip": ip,
+                    "device_port": str(port),
+                    "di_start": str(di_start),
+                    "di_size": str(di_size),
+                    "do_start": str(coil_start),
+                    "do_size": str(coil_size),
+                    "ai_start": str(ir_start),
+                    "ai_size": str(ir_size),
+                    "aor_start": str(hr_start),
+                    "aor_size": str(hr_size),
+                    "aow_start": str(hr_start),
+                    "aow_size": str(hr_size),
+                    "device_pause": str(pause_ms),
+                },
+                allow_redirects=False,
             )
+            if resp.status_code != 302:
+                raise OpenPLCConfigError(
+                    f"add-modbus-device failed: HTTP {resp.status_code}\n{resp.text[:500]}"
+                )
+
+        _retry_on_db_lock(_do_add)
+
+    def remove_modbus_slave_device_if_exists(self, name: str) -> None:
+        """Idempotency: bring-up may run against an OpenPLC instance that
+        already has this device registered — e.g. a container that
+        survived a docker daemon restart with its SQLite db intact, while
+        process-sim and the network got recreated fresh. Without this,
+        add_modbus_slave_device fails on OpenPLC's UNIQUE constraint on
+        device name instead of just reconfiguring cleanly.
+        """
+        resp = self.session.get(f"{self.base_url}/modbus")
+        for dev_id, dev_name in _DEVICE_ROW_RE.findall(resp.text):
+            if dev_name != name:
+                continue
+
+            def _do_delete(dev_id: str = dev_id) -> None:
+                resp = self.session.get(f"{self.base_url}/delete-device", params={"dev_id": dev_id})
+                if "database is locked" in resp.text.lower():
+                    raise OpenPLCConfigError("database is locked")
+
+            _retry_on_db_lock(_do_delete)
 
     def start_plc(self) -> None:
         self.session.get(f"{self.base_url}/start_plc")
@@ -168,6 +213,7 @@ def bring_up_cedar_hollow(  # nosemgrep: python.lang.security.audit.hardcoded-pa
     client = OpenPLCClient(base_url)
     client.login(username, password)
     client.upload_and_compile(st_path, name="Cedar Hollow", description="OT Range control logic")
+    client.remove_modbus_slave_device_if_exists("process-sim")
     client.add_modbus_slave_device(
         "process-sim",
         field_host,
