@@ -27,30 +27,81 @@ simulated environment only.
 
 ## Status
 
-M0 (repo scaffold + security gates) and M1 (process simulation, Modbus TCP
-slave, engineering CLI, unit + smoke tests) are done. Next: M1.5, moving
-control logic into OpenPLC (IEC 61131-3) so the simulator and the
-controller are separate, reprogrammable components. See
-[`docs/architecture.md`](docs/architecture.md) for the full design and
-milestone plan.
+Working today: the simulated plant, a Modbus TCP sensor, two attack
+scenarios with full teaching material, and detections for both that are
+asserted to fire in CI.
+
+| Milestone | State |
+|---|---|
+| M0 repo scaffold + security gates | done |
+| M1 process sim, Modbus slave, CLI | done |
+| M5 (partial) S01 + S03, sensor, detections, CI assertions | done |
+| M1.5 OpenPLC / IEC 61131-3 control logic | researched, not built — see [`docs/openplc-integration.md`](docs/openplc-integration.md) |
+| M2 FUXA HMI · M3 historian + Grafana · M4 zone networks + Zeek | not started |
+
+See [`docs/architecture.md`](docs/architecture.md) for the full design and
+[`docs/coverage-matrix.md`](docs/coverage-matrix.md) for exactly what is
+detected and what isn't.
 
 ## Quickstart
 
 ```bash
-make setup    # venv + deps + pre-commit hooks
-make sim      # start the process simulator on loopback:5502
-make watch    # in another terminal: live values of key process points
-make test     # 15 unit tests, physics only
-make smoke    # end-to-end: auto control cycle, then an S03 attack preview
+make setup                        # venv + deps + pre-commit hooks
+bash scenarios/run_scenario.sh S03  # watch an attack overflow the tank, and get caught
+```
+
+That one command starts the plant, puts a sensor in front of it,
+generates normal HMI traffic, runs the attack, and prints what the
+detection caught.
+
+Or drive the pieces yourself, one per terminal:
+
+```bash
+make sim      # the plant, on loopback:5502
+make tap      # the sensor, on loopback:5020, logging to logs/modbus.log
+make hmi      # normal HMI polling
+make watch    # live process values
+make detect   # analyse the capture
 ```
 
 Read or write any point by tag name:
 
 ```bash
-.venv/bin/python -m tools.modctl points          # list the full point map
+.venv/bin/python -m tools.modctl points           # list the full point map
 .venv/bin/python -m tools.modctl read LT_101      # tank level
 .venv/bin/python -m tools.modctl write SP_CL_DOSE 1.5
 ```
+
+## Scenarios
+
+Each ships with a briefing, expected impact, detection writeup, and an
+instructor answer key.
+
+| | Scenario | Process impact | Caught by |
+|---|---|---|---|
+| **S01** | [Recon & point enumeration](scenarios/S01-recon/) | None — that's the lesson | 4 rules |
+| **S03** | [Unauthorised command](scenarios/S03-unauthorized-command/) | Tank overflows, pump destroys itself | `MODBUS_UNAUTHORIZED_WRITE` (critical) |
+
+## Tests
+
+```bash
+make test      # fast: physics, framing, scope guard, detection rules
+make test-e2e  # runs every attack for real and asserts its detection fires
+make smoke     # end-to-end plant behaviour
+make security  # gitleaks, ruff, bandit, semgrep, hadolint
+```
+
+`make test-e2e` is the one that matters. It stands up the plant, runs the
+real attack scripts over real sockets, and fails the build if a detection
+stops firing — or if a clean run starts producing false positives.
+
+## Safety
+
+Attack tooling is hard-bound to the range's own address space. Public
+addresses are refused *structurally*, not by policy — editing
+`attacker/scope.yml` to point at real equipment does not work, and the
+guard fails closed on any resolution or config problem. See
+[`attacker/common/scope.py`](attacker/common/scope.py) and its tests.
 
 ## Known limitations
 
