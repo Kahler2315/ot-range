@@ -1,0 +1,53 @@
+name: openplc-integration
+
+# Separate from ci.yml on purpose: this job builds OpenPLC from source
+# (several minutes, first run) and drives real containers end to end, so
+# it's slow. The main ci.yml gate stays fast on every push; this one
+# only runs when files that could actually affect the OpenPLC path
+# change, plus on-demand via workflow_dispatch.
+
+on:
+  push:
+    paths:
+      - "plc/**"
+      - "process_sim/**"
+      - "common/pointmap.py"
+      - "tools/openplc_configure.py"
+      - "tests/docker_harness.py"
+      - "tests/test_openplc_integration.py"
+      - ".github/workflows/openplc-integration.yml"
+  pull_request:
+    paths:
+      - "plc/**"
+      - "process_sim/**"
+      - "common/pointmap.py"
+      - "tools/openplc_configure.py"
+      - "tests/docker_harness.py"
+      - "tests/test_openplc_integration.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  openplc-integration:
+    runs-on: ubuntu-latest
+    # Ubuntu GitHub-hosted runners ship Docker Engine already — no setup
+    # action needed for the daemon itself.
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: OpenPLC integration tests
+        run: pytest -m docker -v
+        timeout-minutes: 25

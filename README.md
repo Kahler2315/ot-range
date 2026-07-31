@@ -27,16 +27,17 @@ simulated environment only.
 
 ## Status
 
-Working today: the simulated plant, a Modbus TCP sensor, two attack
-scenarios with full teaching material, and detections for both that are
-asserted to fire in CI.
+Working today: the simulated plant, a real OpenPLC controller running
+compiled IEC 61131-3 logic, a Modbus TCP sensor, two attack scenarios
+with full teaching material, and detections for both that are asserted
+to fire in CI.
 
 | Milestone | State |
 |---|---|
 | M0 repo scaffold + security gates | done |
 | M1 process sim, Modbus slave, CLI | done |
+| M1.5 real OpenPLC running compiled control logic, S06 attack path proven | done — see [`docs/openplc-integration.md`](docs/openplc-integration.md) |
 | M5 (partial) S01 + S03, sensor, detections, CI assertions | done |
-| M1.5 OpenPLC / IEC 61131-3 control logic | researched, not built — see [`docs/openplc-integration.md`](docs/openplc-integration.md) |
 | M2 FUXA HMI · M3 historian + Grafana · M4 zone networks + Zeek | not started |
 
 See [`docs/architecture.md`](docs/architecture.md) for the full design and
@@ -71,6 +72,24 @@ Read or write any point by tag name:
 .venv/bin/python -m tools.modctl read LT_101      # tank level
 .venv/bin/python -m tools.modctl write SP_CL_DOSE 1.5
 ```
+
+## Run it behind a real PLC
+
+`make sim` above runs an interim Python controller. `make up` runs the
+real thing — [OpenPLC](https://openplcproject.com/), built from source,
+executing compiled IEC 61131-3 logic (`plc/logic/cedar_hollow.st`)
+against the physics simulator over Modbus, the way an actual plant is
+wired. Requires Docker.
+
+```bash
+make up     # builds and starts process-sim + OpenPLC, waits until ready
+```
+
+Then open **http://localhost:8080** — login `openplc` / `openplc` (see
+[`SECURITY.md`](SECURITY.md); this is exactly the kind of default
+credential the scenario library's attacks rely on). `make down` tears it
+down. See [`docs/openplc-integration.md`](docs/openplc-integration.md)
+for how it's wired and what was verified.
 
 ## Scenarios
 

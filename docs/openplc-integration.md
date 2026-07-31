@@ -1,4 +1,15 @@
-# OpenPLC integration notes (M1.5 research)
+# OpenPLC integration notes (M1.5)
+
+**Status: built and verified**, not just researched. `plc/openplc/Dockerfile`
+builds real OpenPLC from pinned source; `process_sim/server.py --field-only`
++ `plc/modbus-map-field.yml` is the field device half of the split;
+`plc/logic/cedar_hollow.st` is the real compiled control logic;
+`tools/openplc_configure.py` scripts bring-up over OpenPLC's own HTTP
+routes; `tests/test_openplc_integration.py` proves all three rungs and
+the S06 attack path against real containers. `make up` brings up the
+whole stack. Everything below this point is the original research that
+guided the build — kept because it's still the accurate reference for
+the addressing scheme and the webserver routes.
 
 Answers the plan's open question: *does OpenPLC's Modbus server expose the
 program-download path S06 needs, or does that need a separate engineering
@@ -95,47 +106,64 @@ configuration order — so adding a device shifts every later device's
 offsets. Worth pinning device order in config and asserting the mapping
 in a test once this lands.
 
-## Planned architecture split for M1.5
+## Architecture split — as built
 
-Current state (M1): `process_sim/server.py` is field device *and*
-controller in one process. The split:
+The M1 combined process (`process_sim/server.py` default mode, still
+used by S01/S03/detection tests) is unchanged. The split exists
+alongside it as `--field-only` mode plus real OpenPLC:
 
 ```
-  process_sim (Modbus SLAVE, "field I/O")
+  process-sim --field-only (Modbus SLAVE, "field I/O")
+    plc/modbus-map-field.yml — its own independent address space
     input registers  : LT_101, FT_201, AIT_301, IT_101   (sensors)
     discrete inputs  : LSHH_101, LSLL_101, P101_FB, P101_FAULT (hardwired)
-    coils            : P101_RUN, V201_OPEN, CL301_RUN    (actuators)
-        ^ polled by
-  OpenPLC (Modbus MASTER to sim; Modbus SLAVE to HMI on 502)
-    runs the three rungs as IEC 61131-3
-    owns setpoints: SP_LVL_HI, SP_LVL_LO, SP_CL_DOSE, SP_ALM_HH, SP_P101_SPD
-    owns MODE_AUTO, ALARM_HORN
+    coils            : P101_RUN, V201_OPEN, CL301_RUN, ALARM_HORN (actuators)
+    holding registers: SP_P101_SPD, SP_CL_DOSE (analog outputs — these
+                        two are genuinely field-side: real signals to a
+                        VFD speed reference and a metering pump)
+        ^ polled by, offset 100 (see mapping table above)
+  OpenPLC (Modbus MASTER to process-sim; Modbus SLAVE to HMI/attacker on 502)
+    plc/logic/cedar_hollow.st — the three rungs, real compiled ST
+    owns MODE_AUTO (%QX0.0) and SP_LVL_HI/SP_LVL_LO/SP_ALM_HH (%QW0-2) —
+    no physical wire, so no reason for the field device to know about them
 ```
 
-This is the honest arrangement: the simulator owns physics and I/O, the
-controller owns logic and setpoints. It also relocates the setpoints from
-the field device to the PLC, which is where an attacker would actually
-have to go to alter them — making S04 (setpoint drift) a PLC-directed
-attack rather than a field-device one.
+`plc/modbus-map-field.yml` is a genuinely separate file from
+`plc/modbus-map.yml`, not a filtered view of it — a real field device
+has its own independent address space, and building it that way meant
+zero risk to the already-tested M1 point map code.
 
-**Consequence for the point map:** `plc/modbus-map.yml` currently
-describes one flat endpoint. It will need to describe two (field I/O vs.
-controller), or grow a `device:` key per point. Deferred until the split
-is actually built, so the schema is driven by a working integration
-rather than guessed at.
+## Verified gotcha, undocumented upstream: no DNS in the Modbus master
 
-## Not yet verified
+OpenPLC's compiled Modbus master resolves configured device addresses
+with libmodbus's `modbus_new_tcp()` → `_modbus_tcp_connect()`, which calls
+plain `inet_addr()` on the configured address string:
 
-Everything above is read from source, not observed running. OpenPLC needs
-either Docker or a native install (`install.sh` requires `apt-get` and
-root), neither of which is available in the environment where this
-research was done. Before M1.5 is called complete, stand OpenPLC up and
-confirm:
+```c
+addr.sin_addr.s_addr = inet_addr(ctx_tcp->ip);
+```
 
-1. The offset-100 master mapping behaves as the source implies, with our
-   specific slave-device configuration.
-2. The three rungs, once translated to ST, reproduce the behavior the
-   existing unit tests assert (auto start/stop at setpoints, interlock
-   stops the pump, alarm annunciates).
-3. `/upload-program` + `/compile-program` + `/start_plc` can be driven
-   programmatically end-to-end, which is what the S06 attack script needs.
+`inet_addr()` parses dotted-decimal IPv4 only — it does **not** resolve
+hostnames. Configuring a slave device with `device_ip=process-sim` (a
+perfectly normal docker-compose service name) silently becomes
+`INADDR_NONE` (`255.255.255.255`), and the master then fails every poll
+with `Connection failed on MB device ...: Network is unreachable` — a
+confusing error with no hint that the actual problem is DNS.
+`tools/openplc_configure.py` works around this by resolving the hostname
+to a literal IP itself (`socket.gethostbyname`) before submitting the
+device form, so a compose service name works as *input* even though
+OpenPLC itself can never see it.
+
+## Verified: the S06 attack path, end to end
+
+`tests/test_openplc_integration.py::test_s06_program_swap_disables_interlock_even_in_auto_mode`
+logs into a *live* OpenPLC instance running the safe program
+(`plc/logic/cedar_hollow.st`) with real default credentials, uploads
+`plc/logic/cedar_hollow_s06_no_interlock.st` (identical except rung 2,
+the protective interlock, is deleted), compiles it, and restarts — the
+same `/upload-program` → `/upload-program-action` → `/compile-program` →
+`/start_plc` sequence a real attacker would use. Confirmed: the pump
+keeps running straight through the level where the interlock used to
+stop it, in auto mode, with the alarm (rung 3, untouched by the swap)
+still firing the whole time. This is the decisive proof for T0843
+Program Download / T0889 Modify Program / T0837 Loss of Protection.

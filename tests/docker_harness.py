@@ -162,6 +162,25 @@ class OpenPLCStack:
             timeout=120,
         )
 
+    def swap_program(self, st_file: str) -> subprocess.CompletedProcess:
+        """Upload, compile, and restart with a different program on an
+        already-configured PLC — the S06 attack path: login, replace the
+        logic, restart, with the previously-registered slave device
+        config untouched (it persists in OpenPLC's own DB and reloads on
+        restart, same as a real attacker would find it).
+        """
+        container_path = "/app/" + str(Path(st_file).resolve().relative_to(REPO_ROOT))
+        return self.run_in_openplc_netns(
+            "import sys\n"
+            "sys.path.insert(0, '/app')\n"
+            "from tools.openplc_configure import OpenPLCClient\n"
+            "client = OpenPLCClient('http://127.0.0.1:8080')\n"
+            "client.login()\n"
+            f"client.upload_and_compile({container_path!r}, name='S06 attack payload')\n"
+            "client.start_plc()\n",
+            timeout=120,
+        )
+
 
 def _free_container_name(prefix: str) -> str:
     return f"{prefix}-{uuid.uuid4().hex[:8]}"

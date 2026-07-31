@@ -186,12 +186,33 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--field-port", type=int, default=5502)
     parser.add_argument("--username", default=DEFAULT_USERNAME)
     parser.add_argument("--password", default=DEFAULT_PASSWORD)
+    parser.add_argument(
+        "--wait-for-server",
+        type=float,
+        default=60.0,
+        help="Seconds to wait for the webserver to become reachable before giving up "
+        "(bring-up right after `docker compose up` races the container's own startup)",
+    )
     return parser.parse_args(argv)
+
+
+def _wait_for_server(base_url: str, timeout_s: float) -> None:
+    deadline = time.time() + timeout_s
+    last_error: Exception | None = None
+    while time.time() < deadline:
+        try:
+            requests.get(f"{base_url}/login", timeout=2)
+            return
+        except requests.exceptions.RequestException as exc:
+            last_error = exc
+            time.sleep(1)
+    raise TimeoutError(f"{base_url} not reachable within {timeout_s}s (last error: {last_error})")
 
 
 def main() -> int:
     args = parse_args()
     try:
+        _wait_for_server(args.base_url, args.wait_for_server)
         bring_up_cedar_hollow(
             args.base_url,
             args.program,

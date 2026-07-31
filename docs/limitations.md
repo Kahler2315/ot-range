@@ -7,11 +7,17 @@ limitation somebody else discovers the hard way.
    numbers are tuned so behavior is legible on a dashboard (a forced pump
    overflows the tank in a demo-friendly number of minutes at a normal
    `--speed`), not for real process engineering analysis.
-2. **Control logic currently lives in Python, not a real PLC.**
-   `process_sim/server.py` runs the auto start/stop, protective interlock,
-   and annunciation rungs directly against the physics state. This moves
-   to OpenPLC (IEC 61131-3 ladder) at M1.5 — the S06 logic-modification
-   scenario isn't meaningful until that split exists.
+2. **Two control-logic paths exist, and the scenario library (S01/S03)
+   still targets the Python one.** `make sim` (default) runs the interim
+   Python controller in `process_sim/server.py`, which is what
+   `attacker/s01_recon.py`, `attacker/s03_unauthorized_command.py`, and
+   the detection tests are built against. `make up` runs the real thing —
+   OpenPLC executing compiled IEC 61131-3 (`plc/logic/cedar_hollow.st`)
+   against `process_sim/server.py --field-only` — verified end to end
+   including the S06 attack path (`docs/openplc-integration.md`), but
+   S01/S03 haven't been re-pointed at it yet. Migrating the scenario
+   library onto the OpenPLC stack is a deliberate follow-up, not done
+   implicitly by M1.5 landing.
 3. **pymodbus is pinned to 3.6.9**, not the current 3.14+. 3.14 renamed
    `ModbusSlaveContext` → `ModbusDeviceContext` and replaced the datastore
    accessors used here with `SimData`/`SimDevice`; 4.0 will make that the

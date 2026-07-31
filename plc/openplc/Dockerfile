@@ -49,4 +49,7 @@ RUN ./install.sh docker \
 
 EXPOSE 8080 502
 
+HEALTHCHECK --interval=2s --timeout=2s --start-period=60s --retries=30 \
+    CMD python3 -c "import socket; socket.create_connection(('127.0.0.1', 8080), timeout=1)" || exit 1
+
 ENTRYPOINT ["./start_openplc.sh"]

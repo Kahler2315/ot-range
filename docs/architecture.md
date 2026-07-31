@@ -208,7 +208,7 @@ scenario it covers, with a published coverage matrix so gaps are visible.
 |---|---|---|
 | **M0** | Repo skeleton, README, license, CI shell, security tooling wired up before any real code | Lint and secret scanning pass on an empty repo |
 | **M1** | Process sim + Modbus map + Modbus slave + CLI | You can watch a tank fill from the terminal |
-| **M1.5** | OpenPLC integration, control logic moves from Python to IEC 61131-3 | S06 viability confirmed |
+| **M1.5** | ✅ OpenPLC integration, control logic moves from Python to IEC 61131-3 | Done — S06 viability confirmed end to end, see `docs/openplc-integration.md` |
 | **M2** | FUXA HMI driving the process | Demoable to a non-technical person |
 | **M3** | Historian + Grafana dashboards | Trends visible over hours |
 | **M4** | Zone networks, router container, Zeek + Suricata | `modbus.log` populating with clean baseline traffic |
@@ -250,11 +250,12 @@ Applies to every commit, not just before release:
 
 1. **FUXA vs. Node-RED** — build a throwaway HMI in each at M2 and pick
    on feel. FUXA is more authentic; Node-RED is faster.
-2. **Does OpenPLC's Modbus server expose everything needed** for the S06
-   logic-download scenario, or does that need a separate engineering
-   interface simulation? First thing to check at M1.5.
-3. **Baseline learning mechanism** — automatic learn-mode run, or
-   hand-written allowlist config?
+2. ~~Does OpenPLC's Modbus server expose everything needed for S06~~ —
+   **resolved.** No — program download is HTTP, not Modbus, and that
+   turned out to be the more realistic attack surface anyway. See
+   `docs/openplc-integration.md`.
+3. ~~Baseline learning mechanism~~ — **resolved.** Automatic: `sensor/detect.py
+   --learn` derives a baseline from a clean traffic capture.
 4. **How to represent "internet-exposed"** convincingly inside a closed
    range so S01/S02 feel real.
 5. **Second process later** — wastewater lift station, or stay with one

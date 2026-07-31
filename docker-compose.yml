@@ -1,0 +1,64 @@
+# M1.5 stack: the field simulator behind a real OpenPLC controller.
+#
+#   make up      # build + start everything, wait for it to be ready
+#   make down    # stop and remove
+#
+# `image:` on each service names the tag `make up` builds directly with
+# `docker build` before calling `docker-compose up` — not built by
+# compose itself, since that needs a newer buildx than ships in Debian's
+# docker-buildx package. If you run `docker-compose`/`docker compose`
+# directly instead of through `make up`, build those tags first or add
+# `--build` back (only works if your buildx is new enough).
+#
+# Web UI: http://localhost:8080 (openplc / openplc — see SECURITY.md,
+# this is a simulated environment only, never expose this port beyond
+# loopback on a real deployment).
+#
+# openplc-configure is a one-shot job: it waits for OpenPLC's webserver,
+# uploads plc/logic/cedar_hollow.st, compiles it, registers process-sim
+# as a Modbus slave device, and starts the PLC. It exits after that —
+# `docker compose up` will show it as "exited (0)", which is expected,
+# not a failure.
+
+services:
+  process-sim:
+    image: ot-range-process-sim
+    build:
+      context: .
+      dockerfile: process_sim/Dockerfile
+    command: ["--speed", "60", "--tick", "1", "--level", "55"]
+    networks: [ot-range]
+
+  openplc:
+    image: ot-range-openplc
+    build:
+      context: ./plc/openplc
+      dockerfile: Dockerfile
+    ports:
+      - "127.0.0.1:8080:8080"
+    networks: [ot-range]
+    depends_on:
+      process-sim:
+        condition: service_started
+
+  openplc-configure:
+    image: ot-range-openplc-configure
+    build:
+      context: .
+      dockerfile: process_sim/Dockerfile
+    entrypoint:
+      [
+        "python", "tools/openplc_configure.py",
+        "--base-url", "http://openplc:8080",
+        "--field-host", "process-sim",
+        "--field-port", "5502",
+      ]
+    networks: [ot-range]
+    depends_on:
+      openplc:
+        condition: service_healthy
+    restart: "no"
+
+networks:
+  ot-range:
+    driver: bridge
