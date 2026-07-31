@@ -1,11 +1,18 @@
 """Modbus TCP slave for Cedar Hollow Pump Station.
 
-Combines the point-map-driven pymodbus datastore with the physics
-simulation (process_sim.plant.Plant) and an interim control loop written
-as three independent rungs. This is the PLC and field device combined for
-now — the split into a real OpenPLC controller happens at M1.5. Writing
-the rungs this way (auto level control / protective interlock /
-annunciation) is a direct translation target for IEC 61131-3 ladder logic.
+Default mode combines the point-map-driven pymodbus datastore with the
+physics simulation (process_sim.plant.Plant) and an interim control loop
+written as three independent rungs — the PLC and field device combined,
+as they were before M1.5. Writing the rungs this way (auto level control
+/ protective interlock / annunciation) is a direct translation target for
+IEC 61131-3 ladder logic, now implemented for real in
+plc/logic/cedar_hollow.st.
+
+--field-only mode drops the control logic entirely and exposes just the
+field I/O (plc/modbus-map-field.yml): actuator coils are raw commands
+from whatever external master is polling (OpenPLC), sensor points are
+read-only ground truth. This is the honest field-device half of the split
+described in docs/openplc-integration.md.
 
 Binds to loopback by default. Do not bind to 0.0.0.0 without understanding
 that Modbus TCP has no authentication — anyone who can reach the port can
@@ -18,6 +25,7 @@ import argparse
 import asyncio
 import logging
 import os
+from pathlib import Path
 
 from pymodbus.datastore import (
     ModbusSequentialDataBlock,
@@ -36,6 +44,7 @@ DEFAULT_HOST = os.environ.get("MODBUS_BIND_HOST", "127.0.0.1")
 DEFAULT_PORT = int(os.environ.get("MODBUS_BIND_PORT", "5502"))
 DEFAULT_SPEED = 60.0  # sim-seconds per real second (1 sim day ~= 24 real minutes)
 DEFAULT_TICK_S = 1.0  # sim-seconds advanced per control-loop scan
+FIELD_MAP_PATH = Path(__file__).resolve().parent.parent / "plc" / "modbus-map-field.yml"
 
 FC_COIL = 1
 FC_DISCRETE_INPUT = 2
@@ -81,11 +90,13 @@ class PlantRunner:
         speed: float = DEFAULT_SPEED,
         tick_s: float = DEFAULT_TICK_S,
         initial_level_pct: float = 55.0,
+        field_only: bool = False,
     ) -> None:
         self.pm = pm
         self.slave = slave
         self.speed = speed
         self.tick_s = tick_s
+        self.field_only = field_only
         self.plant = Plant(PlantState(level_pct=initial_level_pct))
 
     def _get_coil(self, tag: str) -> bool:
@@ -151,8 +162,24 @@ class PlantRunner:
 
         return pump_run, valve_open, cl_run, sp_speed, sp_dose
 
+    def _field_scan(self) -> tuple[bool, bool, bool, float, float]:
+        """Field-only mode: no logic at all. Every actuator coil is a raw
+        command from whatever external master is polling this device
+        (OpenPLC) — read it as-is and drive the physics. Speed and dose
+        are analog output commands, read the same way.
+        """
+        pump_run = self._get_coil("P101_RUN")
+        valve_open = self._get_coil("V201_OPEN")
+        cl_run = self._get_coil("CL301_RUN")
+        sp_speed = self._get_holding("SP_P101_SPD")
+        sp_dose = self._get_holding("SP_CL_DOSE")
+        return pump_run, valve_open, cl_run, sp_speed, sp_dose
+
     def tick(self) -> None:
-        pump_run, valve_open, cl_run, sp_speed, sp_dose = self._control_scan()
+        if self.field_only:
+            pump_run, valve_open, cl_run, sp_speed, sp_dose = self._field_scan()
+        else:
+            pump_run, valve_open, cl_run, sp_speed, sp_dose = self._control_scan()
 
         state = self.plant.step(
             self.tick_s,
@@ -182,19 +209,27 @@ class PlantRunner:
 
 async def main_async(args: argparse.Namespace) -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
-    pm = load_pointmap()
+    map_path = args.map or (FIELD_MAP_PATH if args.field_only else None)
+    pm = load_pointmap(map_path) if map_path else load_pointmap()
     context, slave = build_context(pm)
     runner = PlantRunner(
-        pm, slave, speed=args.speed, tick_s=args.tick, initial_level_pct=args.level
+        pm,
+        slave,
+        speed=args.speed,
+        tick_s=args.tick,
+        initial_level_pct=args.level,
+        field_only=args.field_only,
     )
 
     server = ModbusTcpServer(context, address=(args.host, args.port))
     LOG.info(
-        "Modbus TCP slave on %s:%d (speed=%sx, tick=%ss)",
+        "Modbus TCP slave on %s:%d (speed=%sx, tick=%ss, field_only=%s, map=%s)",
         args.host,
         args.port,
         args.speed,
         args.tick,
+        args.field_only,
+        pm.path,
     )
 
     await asyncio.gather(server.serve_forever(), runner.run_forever())
@@ -204,6 +239,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--host", default=DEFAULT_HOST)
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
+    parser.add_argument(
+        "--field-only",
+        action="store_true",
+        help="Expose only field I/O, no control logic — for use behind an external "
+        "controller such as OpenPLC (defaults the point map to modbus-map-field.yml)",
+    )
+    parser.add_argument(
+        "--map",
+        default=None,
+        help="Override the point map path (default depends on --field-only)",
+    )
     parser.add_argument(
         "--speed",
         type=float,

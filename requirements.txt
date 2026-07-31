@@ -5,3 +5,4 @@
 # the pre-4.0 API. Tracked as a known limitation in docs/limitations.md.
 pymodbus==3.6.9
 pyyaml==6.0.2
+requests==2.32.3

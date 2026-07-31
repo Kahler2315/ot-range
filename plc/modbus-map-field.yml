@@ -1,0 +1,98 @@
+# Field device point map — Cedar Hollow Pump Station, field-I/O side only.
+#
+# This is the *field device's own* independent Modbus address space, used
+# when process_sim/server.py runs in --field-only mode (M1.5+). A real
+# field device (I/O rack, RTU) has its own addressing, separate from
+# whatever the controller polling it chooses to call things — this file
+# is that separate address space, not a subset of plc/modbus-map.yml's
+# addresses.
+#
+# What lives here vs. in the controller (OpenPLC, plc/logic/cedar_hollow.st):
+# a point is field-side only if it corresponds to a real signal on a wire
+# to physical equipment (an actuator command or a sensor reading). Pure
+# control-logic parameters — setpoints that only the logic reads, the
+# auto/manual mode selector — have no physical signal and live entirely
+# in the controller's own memory instead.
+#
+# SP_P101_SPD and SP_CL_DOSE are the interesting middle case: these *are*
+# field-side, because in a real plant they are analog output signals the
+# controller sends to a VFD speed reference and a chemical metering pump
+# stroke setting — physical signals on physical wires, same as a coil.
+#
+# OpenPLC polls this as a Modbus master (slave device config), which maps
+# incoming/outgoing data into its own located variables starting at a
+# fixed offset of 100 (see docs/openplc-integration.md): discrete inputs
+# read here land at %IX100.0+, input registers at %IW100+, coils this
+# device is commanded through land at %QX100.0+, holding registers at
+# %QW100+.
+
+meta:
+  process_name: "Cedar Hollow Pump Station — field I/O"
+
+coils:
+  - addr: 1
+    tag: P101_RUN
+    description: "Fill pump run command (actuator)"
+    default: false
+  - addr: 2
+    tag: V201_OPEN
+    description: "Discharge valve open command (actuator)"
+    default: true
+  - addr: 3
+    tag: CL301_RUN
+    description: "Chlorine dosing pump run command (actuator)"
+    default: true
+  - addr: 4
+    tag: ALARM_HORN
+    description: "Audible alarm horn command (actuator)"
+    default: false
+
+discrete_inputs:
+  - addr: 1
+    tag: LSHH_101
+    description: "High-high level float switch (hardwired sensor)"
+  - addr: 2
+    tag: LSLL_101
+    description: "Low-low level float switch (hardwired sensor)"
+  - addr: 3
+    tag: P101_FB
+    description: "Pump running feedback (hardwired sensor)"
+  - addr: 4
+    tag: P101_FAULT
+    description: "Pump fault / overload latch (hardwired sensor)"
+
+input_registers:
+  - addr: 1
+    tag: LT_101
+    description: "Tank level"
+    unit: "%"
+    scale: 100
+  - addr: 2
+    tag: FT_201
+    description: "Discharge flow"
+    unit: "L/min"
+    scale: 10
+  - addr: 3
+    tag: AIT_301
+    description: "Chlorine residual"
+    unit: "mg/L"
+    scale: 100
+  - addr: 4
+    tag: IT_101
+    description: "Pump motor current"
+    unit: "A"
+    scale: 10
+
+holding_registers:
+  - addr: 1
+    tag: SP_P101_SPD
+    description: "Pump speed command (analog output to VFD)"
+    unit: "%"
+    scale: 100
+    default: 75.0
+  - addr: 2
+    tag: SP_CL_DOSE
+    description: "Chlorine dose command (analog output to metering pump)"
+    unit: "mg/L"
+    scale: 100
+    default: 1.20
