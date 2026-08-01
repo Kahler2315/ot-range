@@ -29,10 +29,14 @@ simulated environment only.
 
 Working today: the simulated plant, a real OpenPLC controller running
 compiled IEC 61131-3 logic, an HMI, a historian + Grafana dashboards, a
-real Zeek + Suricata sensor behind a zone-segmented Docker network, three
-attack scenarios with full teaching material — including the flagship
-manipulation-of-view scenario — and detections for all of them asserted
-to fire in CI.
+real Zeek + Suricata sensor behind a zone-segmented Docker network, and
+four attack scenarios with full teaching material — including the
+flagship manipulation-of-view scenario — with detections for three of
+them asserted to fire in CI (S06's undetected-by-design gap is documented,
+not hidden).
+
+v1 is complete — every milestone below is done, verified by a fresh
+`git clone` reaching the flagship scenario unaided.
 
 | Milestone | State |
 |---|---|
@@ -40,9 +44,10 @@ to fire in CI.
 | M1 process sim, Modbus slave, CLI | done |
 | M1.5 real OpenPLC running compiled control logic, S06 attack path proven | done — see [`docs/openplc-integration.md`](docs/openplc-integration.md) |
 | M2 HMI (custom, not FUXA — see [`docs/architecture.md`](docs/architecture.md) open question 1) | done |
-| M5 (partial) S01 + S03 + S05, sensor, detections, CI assertions | done |
 | M3 historian + Grafana dashboards | done — see [`docs/architecture.md`](docs/architecture.md) open question 6 for the one unverified piece (rendered chart pixels, not the data) |
 | M4 zone networks, router, real Zeek + Suricata | done (v1 scope: one instrumented zone boundary) — see [`docs/architecture.md`](docs/architecture.md) M4 section |
+| M5 S01 + S03 + S05, sensor, detections, CI assertions | done |
+| M6 publish — docs, walkthroughs, coverage matrix | done |
 
 See [`docs/architecture.md`](docs/architecture.md) for the full design and
 [`docs/coverage-matrix.md`](docs/coverage-matrix.md) for exactly what is

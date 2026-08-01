@@ -339,14 +339,14 @@ scenario it covers, with a published coverage matrix so gaps are visible.
 
 | Milestone | Contents | Done when |
 |---|---|---|
-| **M0** | Repo skeleton, README, license, CI shell, security tooling wired up before any real code | Lint and secret scanning pass on an empty repo |
-| **M1** | Process sim + Modbus map + Modbus slave + CLI | You can watch a tank fill from the terminal |
+| **M0** | ✅ Repo skeleton, README, license, CI shell, security tooling wired up before any real code | Done — lint and secret scanning pass in CI |
+| **M1** | ✅ Process sim + Modbus map + Modbus slave + CLI | Done — you can watch a tank fill from the terminal |
 | **M1.5** | ✅ OpenPLC integration, control logic moves from Python to IEC 61131-3 | Done — S06 viability confirmed end to end, see `docs/openplc-integration.md` |
 | **M2** | ✅ HMI driving the process | Done — custom (`hmi/`), not FUXA; demoable to a non-technical person |
 | **M3** | ✅ Historian + Grafana dashboards | Done — `historian/` polls OpenPLC on its own cadence and writes to Postgres, verified end-to-end in `tests/test_historian.py`; Grafana auto-provisions the datasource and a 5-panel dashboard (`dashboards/`), verified via `/api/ds/query` — see the M3 note below on how it was checked |
 | **M4** | ✅ Zone networks, router container, Zeek + Suricata | Done (v1 scope — one instrumented zone boundary, see below) — real `modbus.log`/`modbus_detailed.log` populating from genuine packet capture, verified end-to-end in `tests/test_router.py` |
 | **M5** | ✅ Scenarios S01, S03, S05 + detections + CI assertions | Done — each attack runs, each detection fires, CI proves it |
-| **M6** | **Publish.** Docs, walkthroughs, coverage matrix | Someone else clones it and gets to S05 unaided |
+| **M6** | ✅ **Publish.** Docs, walkthroughs, coverage matrix | Done — verified with a genuine fresh `git clone` on 2026-08-01: `make setup` then `scenarios/run_scenario.sh S05` reaches the flagship scenario unaided, all three detections fire |
 
 S06 is also built (`attacker/s06_logic_modification.py` + full scenario
 docs) even though it was scoped as post-release — its mechanism was
