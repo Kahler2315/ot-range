@@ -18,7 +18,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["common", "process_sim", "sensor", "tools", "attacker", "tests"]
+known-first-party = ["common", "process_sim", "sensor", "tools", "attacker", "tests", "scenarios", "panel"]
 
 [tool.ruff.lint.per-file-ignores]
 # The test harness launches repo modules with sys.executable and
@@ -44,6 +44,10 @@ known-first-party = ["common", "process_sim", "sensor", "tools", "attacker", "te
 # "docker inspect" as a bare command, no shell — same reasoning as the
 # docker-cli entries above.
 "tools/status.py" = ["S603", "S607"]
+# Web control panel: every subprocess call dispatches a fixed,
+# hardcoded command (make targets, scenario runners already in this
+# repo) — no shell, no user/network input reaches the argument list.
+"panel/app.py" = ["S603", "S607"]
 # OpenPLC's shipped default credential (openplc/openplc), not a secret —
 # see docs/openplc-integration.md. E501: the inline nosemgrep rule IDs
 # that suppress the corresponding semgrep finding are unavoidably long.

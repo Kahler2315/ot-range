@@ -6,3 +6,6 @@
 pymodbus==3.6.9
 pyyaml==6.0.2
 requests==2.32.3
+# For panel/app.py (the local web control panel), run on the host, not
+# in a container — pinned to match hmi/requirements.txt's version.
+flask==3.1.0

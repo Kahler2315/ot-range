@@ -2,7 +2,7 @@
         scenario scenario-S01 scenario-S03 scenario-S05 scenario-S06 \
         scenario-S01-docker scenario-S03-docker \
         detect learn-baseline lint security clean \
-        up down reset status logs
+        up down reset status panel logs
 
 VENV := .venv
 PYTHON := $(VENV)/bin/python
@@ -44,7 +44,7 @@ watch:
 ## --- scenarios (require: make sim, make tap, make hmi running) ---
 
 scenario:
-	$(PYTHON) scenarios/menu.py
+	$(PYTHON) -m scenarios.menu
 
 scenario-S01:
 	$(PYTHON) -m attacker.s01_recon --port 5020 --source-ip 127.0.0.2
@@ -118,6 +118,9 @@ reset:
 
 status:
 	$(PYTHON) tools/status.py
+
+panel:
+	$(PYTHON) -m panel.app
 
 logs:
 	$(COMPOSE) logs -f

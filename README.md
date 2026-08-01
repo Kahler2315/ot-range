@@ -53,7 +53,37 @@ See [`docs/architecture.md`](docs/architecture.md) for the full design and
 [`docs/coverage-matrix.md`](docs/coverage-matrix.md) for exactly what is
 detected and what isn't.
 
-## Quickstart
+## GUI (recommended if you're new to this)
+
+```bash
+./start-panel.sh
+```
+
+Sets up the venv on first run, starts a local web control panel, and
+opens it in your browser automatically. Status lights for every
+service, one-click bring-up/reset/teardown, a scenario picker with
+plain-language briefings, and a live console that streams each attack
+and detection as it runs — no terminal commands to memorize. Everything
+it does is one of the `make` targets below, run for you; nothing
+hidden. See [`panel/app.py`](panel/app.py).
+
+**Windows 10/11:** install [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+with WSL2 enabled, and a WSL2 distro (Ubuntu is the default) — Docker
+Desktop needs this on Windows anyway, and this range's `router`
+container needs raw packet capture, which is a Linux-container thing
+regardless of host OS. Clone the repo *inside* the WSL filesystem (not
+`/mnt/c/...`) and run `./start-panel.sh` from the WSL shell — from
+that point on it behaves exactly like Linux, and the panel opens in
+your normal Windows browser via WSL's interop. `start-panel.bat` is a
+best-effort double-click wrapper for Explorer's WSL view
+(`\\wsl.localhost\<distro>\...`); the primary, fully-tested path is the
+WSL shell.
+
+**Linux:** first run also adds an "OT Range Control Panel" entry to
+your desktop's application menu, with this clone's actual path baked
+in, so after that you can launch it without a terminal at all.
+
+## Quickstart (terminal)
 
 ```bash
 make setup                        # venv + deps + pre-commit hooks
@@ -95,6 +125,7 @@ Docker.
 make up      # builds and starts the full stack, waits until ready
 make status  # health checklist: containers, ports, web UIs — what's up, what isn't
 make reset   # wipe postgres + zeek-log state, restart clean, no rebuild
+make panel   # same control panel as ./start-panel.sh, without the first-run setup check
 ```
 
 | Service | URL | Login |
@@ -163,13 +194,15 @@ Each ships with a briefing, expected impact, detection writeup, and an
 instructor answer key.
 
 ```bash
-make scenario   # interactive picker: browse scenarios, pick one, run it
+make scenario   # terminal picker: browse scenarios, pick one, run it
 ```
 
 Lists every scenario with its hook, process impact, and what catches
 it, then dispatches to the right runner (loopback or docker) for you —
 no need to remember which `run_scenario.sh` / `make scenario-*` target
-goes with which scenario.
+goes with which scenario. `./start-panel.sh` (see the GUI section
+above) does the same thing with a browser UI instead of a terminal
+prompt, plus live streaming output and doc links per card.
 
 | | Scenario | Process impact | Caught by |
 |---|---|---|---|
