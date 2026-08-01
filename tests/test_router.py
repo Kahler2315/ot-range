@@ -44,11 +44,7 @@ COMPOSE_FILE = REPO_ROOT / "docker-compose.yml"
 # Detect docker-compose binary — use `docker compose` (plugin) if available,
 # fall back to standalone `docker-compose`. GitHub Actions runners often have
 # only the plugin, not the standalone binary.
-_COMPOSE_CMD = (
-    "docker-compose"
-    if shutil.which("docker-compose")
-    else "docker"
-)
+_COMPOSE_CMD = "docker-compose" if shutil.which("docker-compose") else "docker"
 _COMPOSE_ARGS = [] if shutil.which("docker-compose") else ["compose"]
 
 IMAGE_BUILDS = [
