@@ -34,6 +34,12 @@ services:
       context: .
       dockerfile: process_sim/Dockerfile
     command: ["--speed", "60", "--tick", "1", "--level", "55"]
+    ports:
+      # Loopback only — lets host-run tooling (modctl) reach the field
+      # simulator's Modbus interface directly. Same justification as
+      # OpenPLC's port mapping above: never widen beyond loopback on a
+      # real deployment.
+      - "127.0.0.1:5502:5502"
     networks: [zone-ops]
 
   openplc:
