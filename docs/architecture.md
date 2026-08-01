@@ -80,6 +80,119 @@ the visibility problem and is architecturally honest.
 is invisible to the sensor. Accepted for v1 — most scenarios start in L4
 anyway, which is realistic. See [`limitations.md`](limitations.md).
 
+## M4: the router, as actually built
+
+v1 scope is two Docker networks, not five: `zone-enterprise` (the
+`attacker` container) and `zone-ops` (process-sim, OpenPLC, HMI,
+historian, Grafana — everything else). `router` is the only container on
+both. This collapses L2–L3.5 of the diagram above into one boundary,
+which is the one the scenario library actually needs — see the "Known
+limitation" note above, which already anticipated this.
+
+**How `router` actually relays traffic — a deliberate deviation from the
+plan's original "route all cross-zone traffic through one container"
+phrasing.** Raw IP routing between two Docker bridge networks needs
+`NET_ADMIN` and an explicit static route added to *every* container on
+both sides (Docker does not propagate routes across bridges on its own,
+and without a route back, replies from openplc would have nowhere to
+go). That means modifying postgres's and grafana's containers just to
+carry traffic they're not even part of. Instead, `router` runs an
+**application-layer relay** — `sensor/tap.py`, the same already-tested
+TCP proxy the M1 loopback stack uses, unmodified, listening on
+zone-enterprise and forwarding to `openplc:502` on zone-ops. No NAT, no
+`ip_forward`, no routes on any other container. Real Zeek and Suricata
+then sniff the zone-enterprise-facing interface of that same container —
+genuine libpcap capture of the wire, not tap.py's own log-writing path,
+which is left running in parallel purely for local debugging
+(`/zeek-logs/tap-relay.log`).
+
+This has a real, honest side effect worth naming: because `router`
+terminates two separate TCP connections rather than forwarding IP
+packets, OpenPLC only ever sees connections originating from `router`'s
+own zone-ops address, never the attacker's real IP. That's not a
+limitation to apologize for — it's exactly how a real DMZ jump-host or
+protocol-break device behaves, and it's arguably a *more* realistic
+teaching point than transparent NAT would have been: tracing the pivot
+means correlating the zone-enterprise-side session (real attacker IP,
+what Zeek/Suricata actually observe and alert on) with the zone-ops-side
+session (only shows `router`), not reading one flat conversation.
+
+**Two real bugs found only by running this against genuine traffic, not
+by reasoning about it:**
+
+- **Docker's veth pairs don't compute real TCP checksums** (offloaded to
+  hardware on a real NIC; skipped outright for virtual/intra-host
+  links). Zeek's default behavior is to silently discard analysis on any
+  packet with an invalid checksum — correct for a real deployment, but
+  it meant the Modbus analyzer never fired at all against this traffic
+  until `zeek -C` (ignore checksums) was set. `weird.log`'s
+  `bad_TCP_checksum` entries were the trail; see `router/entrypoint.sh`.
+- **The Modbus app-layer parser is disabled by default in stock
+  `suricata.yaml`** (a performance/false-positive caution for a protocol
+  most deployments don't run). `router/entrypoint.sh` sets
+  `--set app-layer.protocols.modbus.enabled=yes` explicitly — without
+  it, every `modbus:`-keyword rule fails to load with "protocol modbus
+  cannot be used in a signature."
+
+**Extending Zeek's log, not fighting its event order.** Zeek's built-in
+`base/protocols/modbus/main.zeek` gives a real `modbus.log` (ts, uid,
+id, tid, unit, func, pdu_type, exception) for free via `@load
+base/protocols/modbus` — no changes needed. It does not carry
+address/quantity/values, and there's no reliable way to add those to the
+*same* log line: the analyzer raises the generic `modbus_message` event
+(whose handler does the actual `Log::write`, at priority -5) before the
+function-specific events like `modbus_read_holding_registers_request`,
+so anything set from a specific-event handler lands one message too
+late. `router/local.zeek` sidesteps this by writing a genuinely separate
+`modbus_detailed.log` instead — which `sensor/tap.py`'s docstring had
+already named as the expected two-log shape, back when it was only a
+synthetic stand-in. `sensor/zeek_reader.py` joins the two logs by `(uid,
+tid, pdu_type)` and normalizes the handful of real shape differences
+(Zeek's `"REQ"/"RESP"` vs. tap.py's `"request"/"response"`; recovering
+`func_code` from `func`'s name via
+`sensor.modbus_frames.FUNCTION_NAMES`; `is_write` isn't a Zeek field at
+all, derived the same way tap.py derives it) into exactly what
+`sensor/detect.py` already expected. `Detector.analyze()` itself needed
+**zero changes** — the payoff of choosing Zeek-compatible field names
+all the way back at M1.
+
+**Suricata** runs on the same interface, `-c /etc/suricata/suricata.yaml`
+with the Modbus app-layer enabled. `router/suricata.rules` adds five
+rules on top of the ones already shipped in the `suricata` Debian
+package (`modbus-events.rules` — protocol-anomaly alerts like invalid
+function codes, unsolicited responses, request floods): any Modbus write
+function (05/06/0F/10) on the zone-enterprise boundary is `critical`
+(S03/S05-adjacent), and any Modbus traffic at all on that boundary is
+flagged as reconnaissance (S01-adjacent) — both trivially low-false-positive
+because *no legitimate service ever originates from zone-enterprise* in
+this topology, so there's no baseline to tune against, unlike the
+Python-side rules.
+
+**S05 does not have a docker-networked path, and that's a real finding,
+not an oversight.** It writes an undocumented spoof register directly on
+process-sim's own field-only slave — a device that sits *below* OpenPLC
+and is reachable only from zone-ops, never from zone-enterprise even
+through `router`. An attacker confined to zone-enterprise structurally
+cannot pull off S05's specific lie against this topology. See
+[`limitations.md`](limitations.md) for the fuller version — it's worth
+treating as a teaching point in its own right (S05 models a more
+privileged attacker position than S01/S03), not quietly working around.
+
+**S03, on the other hand, needed a real fix, not just plumbing.**
+Pointed at OpenPLC instead of process-sim directly, S03's reads/writes
+landed on the wrong registers — OpenPLC mirrors field I/O at a fixed
+offset (input registers +100, coils/discrete inputs +800; see
+`docs/openplc-integration.md`) that `plc/modbus-map.yml`'s direct
+addressing doesn't account for. `plc/modbus-map-openplc.yml` gives the
+correct addresses for the points S03 (and S01, which never needed a
+point-map lookup to begin with) actually touch, and `attacker/
+s03_unauthorized_command.py` takes an optional `--map` to select it —
+`make scenario-S03-docker` passes it automatically. Confirmed with real
+before/after runs: without the fix, `IT_101`/`LT_101` reads stayed
+pinned at whatever OpenPLC's own unused local registers happened to
+hold; with it, the pump genuinely draws current and the tank level rises
+in real time, watched live through the real network path.
+
 ## Tool stack
 
 | Layer | Tool | License | Notes |
@@ -87,7 +200,7 @@ anyway, which is realistic. See [`limitations.md`](limitations.md).
 | PLC runtime | OpenPLC | GPLv3 | Real IEC 61131-3, from M1.5. Enables genuine logic-modification scenarios. |
 | Process simulation | Custom Python | Apache-2.0 | Owned code. Talks to the PLC over Modbus. |
 | Device sims / attacker tooling | pymodbus, scapy | BSD, GPLv2 | |
-| HMI | FUXA | MIT | Web SCADA/HMI editor, from M2. |
+| HMI | Custom (Flask + HTML/CSS) | Apache-2.0 | `hmi/`, from M2 — see Open Questions below for why this replaced FUXA. |
 | Historian | PostgreSQL | PostgreSQL | Avoids time-series-DB licensing ambiguity. |
 | Dashboards | Grafana | AGPLv3 | |
 | Network sensor | Zeek | BSD | `modbus.log` is the backbone of detection. |
@@ -177,11 +290,20 @@ one who correlates across independent sources catches it.
 
 ### Tier 3 — Control logic and denial
 
-**S06 — Logic modification with safety disabled.** Modified logic leaves
-normal pumping intact but deletes the protective interlock rung. Latent —
-nothing happens until the process hits a condition the interlock should
-have caught. Only meaningful once control logic lives in OpenPLC (M1.5).
-*ATT&CK:* T0889, T0843, T0837, T0880.
+**S06 — Logic modification with safety disabled. ✅ Built, detection
+deliberately incomplete.** Modified logic (`plc/logic/
+cedar_hollow_s06_no_interlock.st`) leaves normal pumping intact but
+deletes the protective interlock rung. Latent — nothing happens until
+the process hits a condition the interlock should have caught.
+`attacker/s06_logic_modification.py` logs into OpenPLC's web UI with its
+default credentials, uploads and compiles the modified program, restarts
+the runtime, then raises `SP_LVL_HI` over Modbus to reach the trigger
+condition without waiting on a real fill cycle. The compromise itself
+happens over HTTP, which nothing in this range inspects — see
+`scenarios/S06-logic-modification/detection.md` for why that's the
+scenario's actual teaching point, not a gap to quietly work around, and
+`docs/coverage-matrix.md`'s "Built, detection deliberately incomplete"
+section. *ATT&CK:* T0889, T0843, T0837, T0880.
 
 **S07 — Denial of control / operator lockout.** Session flood or held
 connections force manual operation. *ATT&CK:* T0813, T0814, T0827.
@@ -221,12 +343,18 @@ scenario it covers, with a published coverage matrix so gaps are visible.
 | **M1** | Process sim + Modbus map + Modbus slave + CLI | You can watch a tank fill from the terminal |
 | **M1.5** | ✅ OpenPLC integration, control logic moves from Python to IEC 61131-3 | Done — S06 viability confirmed end to end, see `docs/openplc-integration.md` |
 | **M2** | ✅ HMI driving the process | Done — custom (`hmi/`), not FUXA; demoable to a non-technical person |
-| **M3** | Historian + Grafana dashboards | Trends visible over hours |
-| **M4** | Zone networks, router container, Zeek + Suricata | `modbus.log` populating with clean baseline traffic |
+| **M3** | ✅ Historian + Grafana dashboards | Done — `historian/` polls OpenPLC on its own cadence and writes to Postgres, verified end-to-end in `tests/test_historian.py`; Grafana auto-provisions the datasource and a 5-panel dashboard (`dashboards/`), verified via `/api/ds/query` — see the M3 note below on how it was checked |
+| **M4** | ✅ Zone networks, router container, Zeek + Suricata | Done (v1 scope — one instrumented zone boundary, see below) — real `modbus.log`/`modbus_detailed.log` populating from genuine packet capture, verified end-to-end in `tests/test_router.py` |
 | **M5** | ✅ Scenarios S01, S03, S05 + detections + CI assertions | Done — each attack runs, each detection fires, CI proves it |
 | **M6** | **Publish.** Docs, walkthroughs, coverage matrix | Someone else clones it and gets to S05 unaided |
 
-Everything after M6 — S02, S04, S06, S07, S08, second protocol, second
+S06 is also built (`attacker/s06_logic_modification.py` + full scenario
+docs) even though it was scoped as post-release — its mechanism was
+already proven end to end by M1.5's own OpenPLC integration tests, so
+turning it into a full scenario was cheap once M4 was done. Its
+detection deliberately isn't built; see `coverage-matrix.md`.
+
+Everything else after M6 — S02, S04, S07, S08, second protocol, second
 process — is post-release. Ship at M6.
 
 ## Quality-of-life features, ranked by value per hour spent
@@ -289,3 +417,15 @@ Applies to every commit, not just before release:
    range so S01/S02 feel real.
 5. **Second process later** — wastewater lift station, or stay with one
    process and add protocol depth instead?
+6. **M3 Grafana dashboard — verified at the data/query level, not by eye.**
+   `dashboards/json/cedar-hollow.json` provisions cleanly (Grafana accepts
+   and stores it without error on both 11.3.0 and 10.4.5) and every panel's
+   `rawSql` was confirmed live against `/api/ds/query`, returning real rows
+   from `process_history` with the expected field names. What wasn't
+   confirmed is the rendered chart pixels: this session's browser tool
+   reported `document.visibilityState: "hidden"` for its own tab against
+   this app (the same class of limitation noted under the FUXA entry
+   above), so Grafana's own visibility-gated panel loader never fired and
+   nothing painted, independent of whether the dashboard is correct.
+   Revisit with a session that has real screenshot/compositing access —
+   should be a two-minute confirmation, not new work.

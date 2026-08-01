@@ -1,5 +1,7 @@
 .PHONY: setup sim tap hmi points dump watch test test-e2e test-docker smoke \
-        scenario-S01 scenario-S03 scenario-S05 detect learn-baseline lint security clean \
+        scenario-S01 scenario-S03 scenario-S05 scenario-S06 \
+        scenario-S01-docker scenario-S03-docker \
+        detect learn-baseline lint security clean \
         up down logs
 
 VENV := .venv
@@ -50,6 +52,28 @@ scenario-S03:
 scenario-S05:
 	$(PYTHON) -m attacker.s05_manipulation_of_view --port 5020 --source-ip 127.0.0.2
 
+## --- M4: same scenarios, run from a real attacker container on
+## zone-enterprise, through the router, over the real Docker network
+## topology (docker-compose.yml) instead of loopback + --source-ip
+## spoofing. Requires `make up` running first. --no-deps matters: without
+## it, compose re-triggers openplc-configure (a live PLC restart) on
+## every run. See docs/architecture.md M4. Zeek/Suricata logs land in the
+## zeek-logs volume; see `docker exec ot-range-router-1 cat
+## /zeek-logs/modbus.log` or tests/test_router.py for how to pull them
+## out. S05 has no -docker target: it spoofs a field-device register
+## that sits below OpenPLC in this topology and is architecturally
+## unreachable from zone-enterprise even through the router — see
+## docs/architecture.md M4 for why that's a real finding, not a bug.
+
+scenario-S01-docker:
+	$(COMPOSE) --profile attacker run --rm --no-deps attacker \
+		attacker.s01_recon --host router --port 502
+
+scenario-S03-docker:
+	$(COMPOSE) --profile attacker run --rm --no-deps attacker \
+		attacker.s03_unauthorized_command --host router --port 502 \
+		--map plc/modbus-map-openplc.yml
+
 detect:
 	$(PYTHON) -m sensor.detect $(MODBUS_LOG)
 
@@ -68,10 +92,14 @@ up:
 	docker build -t ot-range-openplc -f plc/openplc/Dockerfile plc/openplc
 	docker build -t ot-range-openplc-configure -f process_sim/Dockerfile .
 	docker build -t ot-range-hmi -f hmi/Dockerfile .
+	docker build -t ot-range-historian -f historian/Dockerfile .
+	docker build -t ot-range-router -f router/Dockerfile .
+	docker build -t ot-range-attacker -f attacker/Dockerfile .
 	$(COMPOSE) up --wait
 	@echo
 	@echo "OpenPLC web UI: http://localhost:8080 (openplc / openplc)"
 	@echo "HMI (operator display): http://localhost:8090"
+	@echo "Grafana (historian): http://localhost:3000 (admin / admin)"
 	@echo "SECURITY.md applies: simulated environment only."
 
 down:
@@ -79,6 +107,13 @@ down:
 
 logs:
 	$(COMPOSE) logs -f
+
+# S06 targets OpenPLC's own web UI + Modbus interface directly (both
+# published to loopback by `make up`), not the loopback Python sim —
+# the attack surface is OpenPLC's admin interface itself, which the
+# other scenarios don't touch. See scenarios/S06-logic-modification/.
+scenario-S06:
+	$(PYTHON) -m attacker.s06_logic_modification
 
 ## --- tests and gates ---
 

@@ -28,8 +28,9 @@ simulated environment only.
 ## Status
 
 Working today: the simulated plant, a real OpenPLC controller running
-compiled IEC 61131-3 logic, an HMI, a Modbus TCP sensor, three attack
-scenarios with full teaching material — including the flagship
+compiled IEC 61131-3 logic, an HMI, a historian + Grafana dashboards, a
+real Zeek + Suricata sensor behind a zone-segmented Docker network, three
+attack scenarios with full teaching material — including the flagship
 manipulation-of-view scenario — and detections for all of them asserted
 to fire in CI.
 
@@ -40,7 +41,8 @@ to fire in CI.
 | M1.5 real OpenPLC running compiled control logic, S06 attack path proven | done — see [`docs/openplc-integration.md`](docs/openplc-integration.md) |
 | M2 HMI (custom, not FUXA — see [`docs/architecture.md`](docs/architecture.md) open question 1) | done |
 | M5 (partial) S01 + S03 + S05, sensor, detections, CI assertions | done |
-| M3 historian + Grafana · M4 zone networks + Zeek | not started |
+| M3 historian + Grafana dashboards | done — see [`docs/architecture.md`](docs/architecture.md) open question 6 for the one unverified piece (rendered chart pixels, not the data) |
+| M4 zone networks, router, real Zeek + Suricata | done (v1 scope: one instrumented zone boundary) — see [`docs/architecture.md`](docs/architecture.md) M4 section |
 
 See [`docs/architecture.md`](docs/architecture.md) for the full design and
 [`docs/coverage-matrix.md`](docs/coverage-matrix.md) for exactly what is
@@ -81,17 +83,61 @@ Read or write any point by tag name:
 real thing — [OpenPLC](https://openplcproject.com/), built from source,
 executing compiled IEC 61131-3 logic (`plc/logic/cedar_hollow.st`)
 against the physics simulator over Modbus, the way an actual plant is
-wired. Requires Docker.
+wired — plus an HMI and a historian feeding Grafana dashboards. Requires
+Docker.
 
 ```bash
-make up     # builds and starts process-sim + OpenPLC, waits until ready
+make up     # builds and starts the full stack, waits until ready
 ```
 
-Then open **http://localhost:8080** — login `openplc` / `openplc` (see
-[`SECURITY.md`](SECURITY.md); this is exactly the kind of default
-credential the scenario library's attacks rely on). `make down` tears it
+| Service | URL | Login |
+|---|---|---|
+| OpenPLC web UI | http://localhost:8080 | `openplc` / `openplc` |
+| OpenPLC Modbus interface | `localhost:502` | — |
+| HMI (operator display) | http://localhost:8090 | — |
+| Grafana (historian dashboards) | http://localhost:3000 | `admin` / `admin` |
+
+Default credentials are exactly the kind the scenario library's attacks
+rely on — see [`SECURITY.md`](SECURITY.md). `make down` tears the stack
 down. See [`docs/openplc-integration.md`](docs/openplc-integration.md)
-for how it's wired and what was verified.
+for how OpenPLC is wired and what was verified.
+
+## Run scenarios over a real, zone-segmented network
+
+`make up` also brings up `router` — a container on its own
+`zone-enterprise` Docker network, dual-homed onto `zone-ops` (everything
+else), running real Zeek and Suricata against real captured packets, not
+a synthetic log. `openplc` and every other zone-ops service are
+genuinely unreachable from `zone-enterprise` except through `router` —
+no route exists, not a policy that could be misconfigured away (see
+`tests/test_router.py`). `attacker` is a matching on-demand container:
+
+```bash
+make scenario-S01-docker   # recon, over the real network
+make scenario-S03-docker   # unauthorized command, tank overflow, for real
+```
+
+(S05 isn't offered this way — its spoof targets a field device that
+sits below OpenPLC in this topology and genuinely isn't reachable from
+zone-enterprise. See `docs/architecture.md`'s M4 section for why that's
+a finding, not a bug.)
+
+Pull the real capture out of the router and run the same detection
+rules against it:
+
+```bash
+docker cp ot-range-router-1:/zeek-logs/modbus.log /tmp/modbus.log
+docker cp ot-range-router-1:/zeek-logs/modbus_detailed.log /tmp/modbus_detailed.log
+.venv/bin/python -m sensor.detect /tmp/modbus.log --zeek /tmp/modbus_detailed.log
+```
+
+S06 targets a different attack surface entirely — OpenPLC's own web UI
+(published to loopback alongside its Modbus interface, both by `make
+up`), not the Modbus network path at all:
+
+```bash
+make scenario-S06   # default credentials, program upload, safety disabled
+```
 
 ## Scenarios
 
@@ -103,6 +149,7 @@ instructor answer key.
 | **S01** | [Recon & point enumeration](scenarios/S01-recon/) | None — that's the lesson | 4 rules |
 | **S03** | [Unauthorised command](scenarios/S03-unauthorized-command/) | Tank overflows, pump destroys itself | `MODBUS_UNAUTHORIZED_WRITE` (critical) |
 | **S05** | [Manipulation of view](scenarios/S05-manipulation-of-view/) (flagship) | Tank overflows for real while every screen reads a calm 50% | `MODBUS_VIEW_MANIPULATION` (critical) — hardwired float vs. spoofed transmitter |
+| **S06** | [Logic modification, safety disabled](scenarios/S06-logic-modification/) | Interlock deleted from the PLC program itself — latent until the tank reaches high-high with the pump still running | **Not detected** — the compromise is over HTTP, which nothing here inspects. That's the scenario's own point; see its `detection.md` |
 
 ## Tests
 
@@ -128,8 +175,8 @@ guard fails closed on any resolution or config problem. See
 ## Known limitations
 
 See [`docs/limitations.md`](docs/limitations.md) for the full list
-(hydraulics are not engineering-accurate, control logic isn't in a real
-PLC yet, pymodbus version pin, etc).
+(hydraulics are not engineering-accurate, S06 has no detection by
+design, pymodbus version pin, etc).
 
 Nothing in this repo should ever be pointed at real equipment. See
 [`SECURITY.md`](SECURITY.md).
@@ -139,4 +186,4 @@ Nothing in this repo should ever be pointed at real equipment. See
 Apache-2.0 for all original code in this repository — see
 [`LICENSE`](LICENSE). Third-party components used at runtime (OpenPLC,
 Zeek, Suricata, etc.) retain their own licenses; see
-[`docs/licenses.md`](docs/licenses.md) once it lands.
+[`docs/licenses.md`](docs/licenses.md).

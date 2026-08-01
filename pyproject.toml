@@ -32,6 +32,11 @@ known-first-party = ["common", "process_sim", "sensor", "tools", "attacker", "te
 # (http://127.0.0.1:PORT), never user/attacker input.
 "tests/docker_harness.py" = ["S603", "S607", "S310"]
 "tests/test_openplc_integration.py" = ["S603", "S607"]
+"tests/test_historian.py" = ["S603", "S607"]
+"tests/test_router.py" = ["S603", "S607"]
+# "ip" as a bare command, no shell, no external input — same reasoning
+# as the docker-cli entries above. Runs inside the router container only.
+"router/find_iface.py" = ["S607"]
 # OpenPLC's shipped default credential (openplc/openplc), not a secret —
 # see docs/openplc-integration.md. E501: the inline nosemgrep rule IDs
 # that suppress the corresponding semgrep finding are unavoidably long.

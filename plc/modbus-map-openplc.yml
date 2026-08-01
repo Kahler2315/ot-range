@@ -1,0 +1,81 @@
+# Modbus point map for targeting OpenPLC's own slave interface directly
+# (M1.5/M4 topologies), as opposed to plc/modbus-map.yml which targets
+# process-sim's combined slave directly (M1 loopback topology).
+#
+# OpenPLC exposes a located-variable address space of its own — field
+# I/O mirrored from process-sim lands at a fixed offset of 100 (input
+# registers) / 800 (discrete inputs and coils), while OpenPLC's own
+# program-local control coils (just MODE_AUTO here) sit at low
+# addresses. See docs/openplc-integration.md. These offsets are not a
+# guess: they match the already-verified constants in hmi/app.py and
+# historian/ingest.py.
+#
+# Deliberately does NOT include holding_registers (setpoints): those
+# are OpenPLC ST-program-local %MW variables whose layout was authored
+# independently in plc/logic/cedar_hollow.st and does not mirror
+# plc/modbus-map.yml's tag ordering 1:1 (confirmed via S01 recon output
+# showing SP_ALM_HH, not SP_CL_DOSE, at holding register index 2).
+# Nothing in attacker/ currently needs a setpoint write against
+# OpenPLC, so this gap is deferred rather than guessed at.
+
+meta:
+  process_name: "Cedar Hollow Pump Station (via OpenPLC)"
+  protocol: "Modbus TCP"
+
+coils:
+  - addr: 1
+    tag: MODE_AUTO
+    description: "Control mode: 1 = auto, 0 = manual (OpenPLC program-local, address 0)"
+    default: true
+  - addr: 801
+    tag: P101_RUN
+    description: "Fill pump run command (field mirror, offset 800)"
+    default: false
+  - addr: 802
+    tag: V201_OPEN
+    description: "Discharge valve open (field mirror, offset 800)"
+    default: true
+  - addr: 803
+    tag: CL301_RUN
+    description: "Chlorine dosing pump run (field mirror, offset 800)"
+    default: true
+  - addr: 804
+    tag: ALARM_HORN
+    description: "Audible alarm (field mirror, offset 800)"
+    default: false
+
+discrete_inputs:
+  - addr: 801
+    tag: LSHH_101
+    description: "High-high level float switch, hardwired (field mirror, offset 800)"
+  - addr: 802
+    tag: LSLL_101
+    description: "Low-low level float switch, hardwired (field mirror, offset 800)"
+  - addr: 803
+    tag: P101_FB
+    description: "Pump running feedback (field mirror, offset 800)"
+  - addr: 804
+    tag: P101_FAULT
+    description: "Pump fault, overload latch (field mirror, offset 800)"
+
+input_registers:
+  - addr: 101
+    tag: LT_101
+    description: "Tank level (field mirror, offset 100)"
+    unit: "%"
+    scale: 100
+  - addr: 102
+    tag: FT_201
+    description: "Discharge flow (field mirror, offset 100)"
+    unit: "L/min"
+    scale: 10
+  - addr: 103
+    tag: AIT_301
+    description: "Chlorine residual (field mirror, offset 100)"
+    unit: "mg/L"
+    scale: 100
+  - addr: 104
+    tag: IT_101
+    description: "Pump motor current (field mirror, offset 100)"
+    unit: "A"
+    scale: 10

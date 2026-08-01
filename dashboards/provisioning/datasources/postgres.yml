@@ -1,0 +1,20 @@
+# Auto-provisions the Postgres datasource on Grafana startup — no manual
+# "add a datasource" click-through. See docs/architecture.md M3.
+apiVersion: 1
+
+datasources:
+  - name: Cedar Hollow Historian
+    uid: cedarhollow-pg
+    type: postgres
+    access: proxy
+    url: postgres:5432
+    database: historian
+    user: historian
+    isDefault: true
+    editable: false
+    jsonData:
+      sslmode: disable
+      postgresVersion: 1600
+      timescaledb: false
+    secureJsonData:
+      password: historian

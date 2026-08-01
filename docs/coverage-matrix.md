@@ -46,22 +46,38 @@ learns. That is an argument for treating S01 alerts as urgent rather than
 informational — they are loudest at the only point where the plant hasn't
 been touched yet.
 
+## Built, detection deliberately incomplete
+
+| Scenario | Technique | Detection status | CI assertion |
+|---|---|---|---|
+| **S06** Logic modification, safety disabled | T0889 Modify Program, T0843 Program Download, T0837 Loss of Protection, T0880 Loss of Safety | **Not detected.** The compromise is over HTTP (OpenPLC's web UI); no `sensor/` or `router/` component inspects HTTP. The scenario's own accelerating `SP_LVL_HI` write is Modbus-visible and would fire `MODBUS_UNAUTHORIZED_SOURCE`/`MODBUS_UNAUTHORIZED_WRITE` the same as S03, but that's downstream of the real damage, not the attack itself. See [`scenarios/S06-logic-modification/detection.md`](../scenarios/S06-logic-modification/detection.md) | Mechanism proven end-to-end: `tests/test_openplc_integration.py::test_s06_program_swap_disables_interlock_even_in_auto_mode`. Attack script (`attacker/s06_logic_modification.py`) and full scenario docs exist; no `tests/test_attack_detection.py` entry, because there's no detection to assert |
+
+Listed separately from "Built and regression-tested" on purpose: S06 is
+a fully playable scenario with real teaching material, and it would be
+dishonest to either bury it in "not yet built" or imply it has detection
+coverage it doesn't. The gap is the point — see the scenario's own
+`detection.md`.
+
 ## Not yet built
 
 | Scenario | Technique | Planned detection | Blocked on |
 |---|---|---|---|
-| **S02** Default creds / project exfil | T0812, T0822, T0859, T0845 | Auth from unexpected source; off-hours access; outbound volume anomaly | HTTP-layer sensor (see [`openplc-integration.md`](openplc-integration.md)) |
-| **S04** Setpoint drift | T0836, T0831 | Historian trend analysis — deliberately *not* signature-based | Historian (M3) |
-| **S06** Logic modification, safety disabled | T0889, T0843, T0837, T0880 | Program upload outside maintenance window; logic checksum drift; runtime restart | Mechanism proven end-to-end (`tests/test_openplc_integration.py::test_s06_program_swap_disables_interlock_even_in_auto_mode`); no `attacker/` script, sensor coverage of the HTTP upload path, or scenario docs yet |
+| **S02** Default creds / project exfil | T0812, T0822, T0859, T0845 | Auth from unexpected source; off-hours access; outbound volume anomaly | HTTP-layer sensor — same blocker as S06 above (see [`openplc-integration.md`](openplc-integration.md)) |
+| **S04** Setpoint drift | T0836, T0831 | Historian trend analysis — deliberately *not* signature-based | Historian is built (M3, `historian/`); no `attacker/` drift script, Grafana alert rule, or scenario docs yet |
 | **S07** Denial of control | T0813, T0814, T0827 | Connection rate/count anomaly; HMI polling gaps | — (buildable now) |
 | **S08** Replay | T0855, T0842 | Transaction ID reuse; command outside operational envelope | — (buildable now) |
 
 ## Honest gaps in what exists today
 
-1. **The sensor is an inline proxy, not Zeek.** It emits Zeek
-   `modbus.log`-compatible records so rules port over, but it is not the
-   real thing and does not do protocol validation, reassembly edge cases,
-   or anything Suricata would give. Replaced/complemented at M4.
+1. **The M1 loopback sensor is still an inline proxy, not Zeek — but real
+   Zeek now exists in the M4 router.** `sensor/tap.py` (backing the fast
+   `make scenario-S01` etc. path) emits Zeek `modbus.log`-compatible
+   records without being Zeek. The M4 `router` container runs genuine
+   Zeek + Suricata against real captured packets instead — real protocol
+   parsing, real reassembly, a real signature layer — and
+   `sensor/detect.py`'s rules catch attacks through that path unmodified
+   (`sensor/zeek_reader.py`, `tests/test_router.py`). Both paths coexist
+   on purpose: loopback for fast iteration, `router` for the real thing.
 2. **Source identity is IP-based**, and Modbus has no authentication, so
    a spoofed source address defeats the source-based rules. Realistic —
    this is exactly why segmentation matters more than detection — but it
@@ -70,6 +86,7 @@ been touched yet.
    specified in the plan and would catch S07; not built.
 4. **No Sigma rule export.** Rules are Python. Sigma output is planned so
    they are portable to other stacks.
-5. **Only cross-zone traffic will be visible once M4 lands.** An attacker
-   already inside the control zone is invisible to a sensor at the zone
-   boundary. Documented in [`limitations.md`](limitations.md).
+5. **Only cross-zone traffic is visible, and only at one boundary.** M4
+   v1 is two zones (`zone-enterprise`, `zone-ops`) bridged by `router`;
+   an attacker already inside `zone-ops` is invisible to it, same as the
+   plan always anticipated. Documented in [`limitations.md`](limitations.md).

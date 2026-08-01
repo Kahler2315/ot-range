@@ -10,15 +10,19 @@
  *
  * This is the file an attacker uploads via OpenPLC's web interface
  * (T0843 Program Download) after reaching it with default credentials
- * (T0812, chained from S02). Compare against cedar_hollow.st with a
- * plain diff — the change is one missing IF block, easy to miss in a
- * code review that isn't specifically looking for it. That's the point:
- * T0889 Modify Program / T0837 Loss of Protection / T0880 Loss of Safety
- * describe exactly this kind of change, not an obviously broken program.
+ * (T0812, chained from S02). The *functional* change is one missing IF
+ * block (rung 2, four lines) — easy to miss in a code review that isn't
+ * specifically looking for it. That's the point: T0889 Modify Program /
+ * T0837 Loss of Protection / T0880 Loss of Safety describe exactly this
+ * kind of change, not an obviously broken program. A literal `diff`
+ * against cedar_hollow.st shows more than four lines, because the
+ * surrounding comments were also rewritten between these two
+ * independently-authored files — see scenarios/S06-logic-modification/
+ * answer-key.md question 2 for how to separate the real change from
+ * that noise.
  *
- * See docs/openplc-integration.md and scenarios/ (S06 briefing pending —
- * this file exists once OpenPLC is verified running for real; the
- * scenario writeup follows once that's proven end to end). *)
+ * See docs/openplc-integration.md, attacker/s06_logic_modification.py,
+ * and scenarios/S06-logic-modification/ for the full scenario. *)
 
 PROGRAM cedar_hollow
   VAR

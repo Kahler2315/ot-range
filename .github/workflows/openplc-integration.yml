@@ -3,8 +3,11 @@ name: openplc-integration
 # Separate from ci.yml on purpose: this job builds OpenPLC from source
 # (several minutes, first run) and drives real containers end to end, so
 # it's slow. The main ci.yml gate stays fast on every push; this one
-# only runs when files that could actually affect the OpenPLC path
-# change, plus on-demand via workflow_dispatch.
+# only runs when files that could actually affect the docker-composed
+# stack (OpenPLC path, the M3 historian/Grafana path, or the M4 router/
+# zone-network path) change, plus on-demand via workflow_dispatch.
+# Covers tests/test_openplc_integration.py, tests/test_historian.py, and
+# tests/test_router.py — all pytest.mark.docker.
 
 on:
   push:
@@ -15,6 +18,15 @@ on:
       - "tools/openplc_configure.py"
       - "tests/docker_harness.py"
       - "tests/test_openplc_integration.py"
+      - "historian/**"
+      - "dashboards/**"
+      - "hmi/**"
+      - "docker-compose.yml"
+      - "tests/test_historian.py"
+      - "router/**"
+      - "attacker/**"
+      - "sensor/**"
+      - "tests/test_router.py"
       - ".github/workflows/openplc-integration.yml"
   pull_request:
     paths:
@@ -24,6 +36,15 @@ on:
       - "tools/openplc_configure.py"
       - "tests/docker_harness.py"
       - "tests/test_openplc_integration.py"
+      - "historian/**"
+      - "dashboards/**"
+      - "hmi/**"
+      - "docker-compose.yml"
+      - "tests/test_historian.py"
+      - "router/**"
+      - "attacker/**"
+      - "sensor/**"
+      - "tests/test_router.py"
   workflow_dispatch:
 
 permissions:
@@ -48,6 +69,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements-dev.txt
 
-      - name: OpenPLC integration tests
+      - name: Docker integration tests
         run: pytest -m docker -v
-        timeout-minutes: 25
+        timeout-minutes: 45

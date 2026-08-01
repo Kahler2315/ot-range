@@ -1,0 +1,30 @@
+# Cedar Hollow M4 — baseline Suricata ruleset for the router's
+# zone-enterprise-facing interface. Complements, not replaces, the
+# Zeek + sensor/detect.py baseline-allowlist layer that does the real
+# work in this repo — see docs/architecture.md's detection design.
+#
+# Suricata's own protocol-anomaly rules for Modbus ship with the
+# package (/etc/suricata/rules/modbus-events.rules) — they catch
+# malformed/invalid Modbus PDUs, unsolicited responses, and request
+# floods, things a byte-level parser is better placed to catch than a
+# log-correlation script. `.rules` files have no include directive, so
+# router/Dockerfile concatenates that file with this one at build time
+# rather than duplicating its contents here.
+
+# S03/S05-adjacent: any Modbus write function (05/06/0F/10) arriving on
+# zone-enterprise's interface toward the relay port. This interface
+# only ever carries traffic between an attacker container and the
+# router in the M4 topology — normal HMI/historian traffic lives
+# entirely on zone-ops and never crosses here — so *any* Modbus write
+# seen on this wire is inherently the thing the scenario library is
+# built to teach, not a false-positive-prone heuristic.
+alert modbus any any -> any 502 (msg:"OT-RANGE Modbus write on zone-enterprise boundary"; modbus: function 5; classtype:attempted-admin; sid:9000001; rev:1;)
+alert modbus any any -> any 502 (msg:"OT-RANGE Modbus write on zone-enterprise boundary"; modbus: function 6; classtype:attempted-admin; sid:9000002; rev:1;)
+alert modbus any any -> any 502 (msg:"OT-RANGE Modbus write on zone-enterprise boundary"; modbus: function 15; classtype:attempted-admin; sid:9000003; rev:1;)
+alert modbus any any -> any 502 (msg:"OT-RANGE Modbus write on zone-enterprise boundary"; modbus: function 16; classtype:attempted-admin; sid:9000004; rev:1;)
+
+# S01-adjacent: any Modbus traffic at all on this boundary is recon by
+# definition (no legitimate service originates from zone-enterprise) —
+# a lower-severity catch-all so the analyst sees the reconnaissance
+# too, not just the moment it turns into a write.
+alert modbus any any -> any 502 (msg:"OT-RANGE Modbus traffic from zone-enterprise"; classtype:network-scan; sid:9000005; rev:1;)

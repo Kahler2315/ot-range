@@ -1,0 +1,15 @@
+# Auto-loads dashboards from dashboards/json/ on Grafana startup — the
+# repo's own dashboard is there the moment the container comes up,
+# never "here's a JSON file, go import it yourself."
+apiVersion: 1
+
+providers:
+  - name: "Cedar Hollow"
+    orgId: 1
+    folder: ""
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/provisioning/dashboards/json

@@ -18,7 +18,8 @@ circumvent that guard.
 ## Responsible use
 
 - Use this range on an isolated machine or isolated virtual network.
-- Do not expose any service in this stack (Modbus slave, HMI, historian) to
+- Do not expose any service in this stack (Modbus slave, OpenPLC web UI,
+  HMI, historian, Grafana, the M4 router) to
   the public internet. Defaults bind to loopback or an internal Docker
   network only — keep it that way.
 - If you adapt scenarios here for a class, CTF, or exercise, keep the same

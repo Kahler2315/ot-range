@@ -167,3 +167,10 @@ keeps running straight through the level where the interlock used to
 stop it, in auto mode, with the alarm (rung 3, untouched by the swap)
 still firing the whole time. This is the decisive proof for T0843
 Program Download / T0889 Modify Program / T0837 Loss of Protection.
+
+That test proved the mechanism; `attacker/s06_logic_modification.py`
+turns it into the actual S06 scenario (`make scenario-S06`), and
+`scenarios/S06-logic-modification/` has the full briefing/detection/
+answer-key. Verified live against the real `make up` stack, not just in
+the test harness: interlock absence confirmed 33 seconds after the
+attack, tank level 99.3% with the pump still running.

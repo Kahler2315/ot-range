@@ -34,9 +34,9 @@ DEFAULT_PORT = 5502
 class Session:
     """Thin point-map-aware wrapper so the attack reads like the writeup."""
 
-    def __init__(self, client: ModbusTcpClient) -> None:
+    def __init__(self, client: ModbusTcpClient, map_path: str | None = None) -> None:
         self.client = client
-        self.pm = load_pointmap()
+        self.pm = load_pointmap(map_path) if map_path else load_pointmap()
 
     def read(self, tag: str) -> bool | float:
         p = self.pm[tag]
@@ -54,7 +54,14 @@ class Session:
         self.client.write_coil(self.pm[tag].index, value)
 
 
-def run(host: str, port: int, timeout_s: float, poll_s: float, source_ip: str | None = None) -> int:
+def run(
+    host: str,
+    port: int,
+    timeout_s: float,
+    poll_s: float,
+    source_ip: str | None = None,
+    map_path: str | None = None,
+) -> int:
     target = guard(host, port, SCENARIO)
 
     source_address = (source_ip, 0) if source_ip else None
@@ -63,7 +70,7 @@ def run(host: str, port: int, timeout_s: float, poll_s: float, source_ip: str | 
         print(f"[!] could not connect to {target.connect_host}:{target.port}")
         return 1
 
-    session = Session(client)
+    session = Session(client, map_path)
     try:
         level = session.read("LT_101")
         mode_auto = session.read("MODE_AUTO")
@@ -140,12 +147,22 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=None,
         help="Bind this source address, so the attacker is distinguishable from the HMI",
     )
+    parser.add_argument(
+        "--map",
+        default=None,
+        help=(
+            "Point map to use (default plc/modbus-map.yml, for talking to "
+            "process-sim directly). Pass plc/modbus-map-openplc.yml when "
+            "--host targets OpenPLC/the M4 router instead — OpenPLC mirrors "
+            "field I/O at different addresses; see that file's own comments."
+        ),
+    )
     return parser.parse_args(argv)
 
 
 def main() -> int:
     args = parse_args()
-    return run(args.host, args.port, args.timeout, args.poll, args.source_ip)
+    return run(args.host, args.port, args.timeout, args.poll, args.source_ip, args.map)
 
 
 if __name__ == "__main__":

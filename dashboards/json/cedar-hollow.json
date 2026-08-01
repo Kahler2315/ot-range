@@ -1,0 +1,101 @@
+{
+  "title": "Cedar Hollow Pump Station",
+  "uid": "cedar-hollow-overview",
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "5s",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Tank Level (%)",
+      "type": "timeseries",
+      "datasource": { "type": "grafana-postgresql-datasource", "uid": "cedarhollow-pg" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "fieldConfig": {
+        "defaults": { "unit": "percent", "min": 0, "max": 100 },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "rawSql": "SELECT ts AS time, level_pct AS \"Level\" FROM process_history WHERE $__timeFilter(ts) ORDER BY ts",
+          "format": "time_series",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Pump Current (A)",
+      "type": "timeseries",
+      "datasource": { "type": "grafana-postgresql-datasource", "uid": "cedarhollow-pg" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "fieldConfig": {
+        "defaults": { "unit": "amp" },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "rawSql": "SELECT ts AS time, pump_current_a AS \"Current\" FROM process_history WHERE $__timeFilter(ts) ORDER BY ts",
+          "format": "time_series",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Chlorine Residual (mg/L)",
+      "type": "timeseries",
+      "datasource": { "type": "grafana-postgresql-datasource", "uid": "cedarhollow-pg" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "fieldConfig": {
+        "defaults": { "unit": "none" },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "rawSql": "SELECT ts AS time, chlorine_mgl AS \"Chlorine\" FROM process_history WHERE $__timeFilter(ts) ORDER BY ts",
+          "format": "time_series",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Flow (LPM)",
+      "type": "timeseries",
+      "datasource": { "type": "grafana-postgresql-datasource", "uid": "cedarhollow-pg" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "fieldConfig": {
+        "defaults": { "unit": "none" },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "rawSql": "SELECT ts AS time, flow_lpm AS \"Flow\" FROM process_history WHERE $__timeFilter(ts) ORDER BY ts",
+          "format": "time_series",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Alarms & Discrete State",
+      "type": "state-timeline",
+      "datasource": { "type": "grafana-postgresql-datasource", "uid": "cedarhollow-pg" },
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 16 },
+      "fieldConfig": {
+        "defaults": { "unit": "none" },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "rawSql": "SELECT ts AS time, pump_run AS \"Pump Run\", valve_open AS \"Valve Open\", cl_run AS \"Cl Dose Run\", mode_auto AS \"Mode Auto\", lshh AS \"LSHH (High-High)\", lsll AS \"LSLL (Low-Low)\", pump_fault AS \"Pump Fault\", alarm AS \"Alarm Horn\" FROM process_history WHERE $__timeFilter(ts) ORDER BY ts",
+          "format": "time_series",
+          "refId": "A"
+        }
+      ]
+    }
+  ]
+}

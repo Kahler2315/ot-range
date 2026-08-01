@@ -14,6 +14,12 @@
 # SECURITY.md, this is a simulated environment only, never expose this
 # port beyond loopback on a real deployment).
 # HMI (operator display):     http://localhost:8090
+# Grafana (historian):        http://localhost:3000 (admin / admin — same
+# simulated-environment caveat as OpenPLC's default creds, see SECURITY.md).
+#
+# Host ports are overridable (OPENPLC_HTTP_PORT / HMI_PORT / GRAFANA_PORT)
+# so an isolated second stack — e.g. tests/test_historian.py's compose
+# project — can run alongside a normal `make up` without a port clash.
 #
 # openplc-configure is a one-shot job: it waits for OpenPLC's webserver,
 # uploads plc/logic/cedar_hollow.st, compiles it, registers process-sim
@@ -28,7 +34,7 @@ services:
       context: .
       dockerfile: process_sim/Dockerfile
     command: ["--speed", "60", "--tick", "1", "--level", "55"]
-    networks: [ot-range]
+    networks: [zone-ops]
 
   openplc:
     image: ot-range-openplc
@@ -36,8 +42,14 @@ services:
       context: ./plc/openplc
       dockerfile: Dockerfile
     ports:
-      - "127.0.0.1:8080:8080"
-    networks: [ot-range]
+      - "127.0.0.1:${OPENPLC_HTTP_PORT:-8080}:8080"
+      # Loopback only, same as the web UI above — lets host-run tooling
+      # (attacker/s06_logic_modification.py, ad-hoc modctl debugging)
+      # reach OpenPLC's own Modbus interface directly, the same way a
+      # real engineer's laptop on the same subnet as an exposed PLC
+      # would. Never widen this beyond loopback on a real deployment.
+      - "127.0.0.1:${OPENPLC_MODBUS_PORT:-502}:502"
+    networks: [zone-ops]
     depends_on:
       process-sim:
         condition: service_started
@@ -54,7 +66,7 @@ services:
         "--field-host", "process-sim",
         "--field-port", "5502",
       ]
-    networks: [ot-range]
+    networks: [zone-ops]
     depends_on:
       openplc:
         condition: service_healthy
@@ -69,12 +81,133 @@ services:
       OPENPLC_HOST: openplc
       OPENPLC_PORT: "502"
     ports:
-      - "127.0.0.1:8090:8090"
-    networks: [ot-range]
+      - "127.0.0.1:${HMI_PORT:-8090}:8090"
+    networks: [zone-ops]
     depends_on:
       openplc-configure:
         condition: service_completed_successfully
 
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: historian
+      POSTGRES_PASSWORD: historian
+      POSTGRES_DB: historian
+    volumes:
+      - historian-data:/var/lib/postgresql/data
+    networks: [zone-ops]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U historian -d historian"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  historian:
+    image: ot-range-historian
+    build:
+      context: .
+      dockerfile: historian/Dockerfile
+    environment:
+      OPENPLC_HOST: openplc
+      OPENPLC_PORT: "502"
+      DATABASE_URL: postgresql://historian:historian@postgres/historian
+    networks: [zone-ops]
+    depends_on:
+      openplc-configure:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+
+  grafana:
+    # Pinned to a specific tag like every other image here. The
+    # provisioned dashboard is dashboards/json/cedar-hollow.json — see
+    # docs/architecture.md M3 for how its panel queries were verified
+    # (this session's browser tooling couldn't render/screenshot Grafana's
+    # own UI, so verification went through /api/ds/query directly).
+    image: grafana/grafana-oss:10.4.5
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+    volumes:
+      - ./dashboards/provisioning:/etc/grafana/provisioning
+      - ./dashboards/json:/etc/grafana/provisioning/dashboards/json
+    ports:
+      - "127.0.0.1:${GRAFANA_PORT:-3000}:3000"
+    networks: [zone-ops]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # --- M4: zone-enterprise <-> zone-ops boundary ---
+  #
+  # router is the only container on both networks. It relays Modbus TCP
+  # from zone-enterprise to openplc on zone-ops (an inline protocol
+  # gateway — sensor/tap.py's already-tested relay logic, unmodified —
+  # not raw IP routing, which would need NET_ADMIN and static routes
+  # added to every other container just to get return traffic back).
+  # Real Zeek and Suricata sniff the zone-enterprise-facing interface, so
+  # id.orig_h in the resulting logs is the attacker's real container IP,
+  # not something faked with --source-ip the way the loopback stack
+  # needs to. See docs/architecture.md M4 for the full design rationale.
+  router:
+    image: ot-range-router
+    build:
+      context: .
+      dockerfile: router/Dockerfile
+    cap_add:
+      - NET_RAW
+    environment:
+      UPSTREAM_HOST: openplc
+      UPSTREAM_PORT: "502"
+      RELAY_PORT: "502"
+      ZONE_ENTERPRISE_SUBNET: ${ZONE_ENTERPRISE_SUBNET:-10.20.0.0/24}
+    networks:
+      zone-enterprise: {}
+      zone-ops: {}
+    volumes:
+      - zeek-logs:/zeek-logs
+    depends_on:
+      openplc-configure:
+        condition: service_completed_successfully
+
+  # One-shot: `docker compose run --rm attacker python -m attacker.s01_recon
+  # --host router --port 502 ...` (see Makefile). Not started by `make up`
+  # — profiled off so it doesn't sit running for no reason.
+  attacker:
+    image: ot-range-attacker
+    build:
+      context: .
+      dockerfile: attacker/Dockerfile
+    networks:
+      zone-enterprise: {}
+    profiles: ["attacker"]
+    depends_on:
+      router:
+        condition: service_started
+
 networks:
-  ot-range:
+  # Pinned subnets (not Docker-assigned) so attacker/scope.yml can name
+  # them precisely instead of trusting "whatever Docker picks this run."
+  # RFC 1918, chosen away from the common 172.17-172.31/192.168.x default
+  # ranges to avoid colliding with other stacks/VPNs on a dev machine.
+  #
+  # Overridable (ZONE_OPS_SUBNET / ZONE_ENTERPRISE_SUBNET) for the same
+  # reason the host ports are: Docker refuses two networks with
+  # overlapping subnets even across different compose projects, so an
+  # isolated second stack — tests/test_router.py's compose project —
+  # needs different values than a normal `make up`.
+  zone-ops:
     driver: bridge
+    ipam:
+      config:
+        - subnet: ${ZONE_OPS_SUBNET:-10.30.0.0/24}
+  zone-enterprise:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: ${ZONE_ENTERPRISE_SUBNET:-10.20.0.0/24}
+
+volumes:
+  historian-data:
+  zeek-logs:

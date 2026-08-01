@@ -5,9 +5,25 @@
 # address here does not work — attacker/common/scope.py refuses it
 # regardless, and that ceiling is not configurable.
 #
-# Default is loopback only, matching the M1 stack where the simulator
-# binds to 127.0.0.1. Widen to the Docker network range when the
-# containerised stack lands (M4).
+# Loopback covers the M1 stack (simulator binds to 127.0.0.1, scenarios
+# run via scenarios/run_scenario.sh with --source-ip spoofing on the
+# loopback /8). zone-ops/zone-enterprise cover the M4 containerised
+# stack (docker-compose.yml's pinned subnets) — the attacker container
+# only ever needs to reach zone-enterprise itself plus, through the
+# router relay, zone-ops; it never needs a route straight to zone-ops,
+# but the allowlist covers both since the router itself is dual-homed
+# and the same scope.yml is shared code.
+#
+# The .21/.31 pair is docker-compose.yml's ZONE_ENTERPRISE_SUBNET /
+# ZONE_OPS_SUBNET overrides, used only by tests/test_router.py's
+# isolated compose project so it doesn't collide with a normal `make
+# up` holding the default .20/.30 subnets — listed explicitly rather
+# than widening this to a covering /16, to keep the allowlist exactly
+# as narrow as what's ever actually run.
 
 allowed_networks:
   - 127.0.0.0/8
+  - 10.20.0.0/24  # zone-enterprise (M4)
+  - 10.30.0.0/24  # zone-ops (M4)
+  - 10.21.0.0/24  # zone-enterprise, tests/test_router.py's isolated project
+  - 10.31.0.0/24  # zone-ops, tests/test_router.py's isolated project

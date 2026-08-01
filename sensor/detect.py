@@ -471,7 +471,17 @@ def main() -> int:
     import argparse
 
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("log", help="Path to the tap's modbus.log")
+    parser.add_argument(
+        "log", nargs="?", help="Path to the tap's modbus.log (omit when using --zeek)"
+    )
+    parser.add_argument(
+        "--zeek",
+        metavar="MODBUS_DETAILED_LOG",
+        help=(
+            "Read real Zeek output instead: 'log' is modbus.log, this is "
+            "modbus_detailed.log (see router/local.zeek, M4)"
+        ),
+    )
     parser.add_argument("--baseline", default=str(DEFAULT_BASELINE_PATH))
     parser.add_argument(
         "--learn",
@@ -481,7 +491,15 @@ def main() -> int:
     parser.add_argument("--json", action="store_true", help="Emit alerts as JSON")
     args = parser.parse_args()
 
-    records = load_records(args.log)
+    if not args.log:
+        parser.error("the following arguments are required: log")
+
+    if args.zeek:
+        from sensor.zeek_reader import load_records as load_zeek_records
+
+        records = load_zeek_records(args.log, args.zeek)
+    else:
+        records = load_records(args.log)
 
     if args.learn:
         print(baseline_to_yaml(learn_baseline(records)), end="")
