@@ -12,7 +12,7 @@ Usage: scenarios/menu.py
 from __future__ import annotations
 
 import socket
-import subprocess
+import subprocess  # nosec B404 -- literal args only, see the call sites below
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -192,12 +192,12 @@ def main() -> int:
         if ans != "y":
             print("    Bring up the stack yourself with `make up`, then re-run this.")
             return 1
-        result = subprocess.run(["make", "up"], cwd=REPO_ROOT)
+        result = subprocess.run(["make", "up"], cwd=REPO_ROOT)  # nosec B603 B607
         if result.returncode != 0:
             return result.returncode
 
     print(f"\n[*] running: {' '.join(mode.command)}\n")
-    result = subprocess.run(mode.command, cwd=REPO_ROOT)
+    result = subprocess.run(mode.command, cwd=REPO_ROOT)  # nosec B603 B607
     return result.returncode
 
 

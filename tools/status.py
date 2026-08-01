@@ -12,7 +12,7 @@ Usage: tools/status.py
 from __future__ import annotations
 
 import socket
-import subprocess
+import subprocess  # nosec B404 -- literal args only, see the call site below
 import sys
 
 import requests
@@ -38,7 +38,7 @@ def http_ok(url: str, timeout: float = 2.0) -> bool:
 
 
 def docker_container_status(name: str) -> str | None:
-    result = subprocess.run(
+    result = subprocess.run(  # nosec B603 B607
         [
             "docker",
             "inspect",
