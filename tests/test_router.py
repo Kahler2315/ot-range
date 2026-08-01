@@ -26,6 +26,7 @@ reachable (see conftest.py). Run explicitly with `pytest -m docker` or
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import time
 import uuid
@@ -39,6 +40,16 @@ from tests.docker_harness import REPO_ROOT
 pytestmark = pytest.mark.docker
 
 COMPOSE_FILE = REPO_ROOT / "docker-compose.yml"
+
+# Detect docker-compose binary — use `docker compose` (plugin) if available,
+# fall back to standalone `docker-compose`. GitHub Actions runners often have
+# only the plugin, not the standalone binary.
+_COMPOSE_CMD = (
+    "docker-compose"
+    if shutil.which("docker-compose")
+    else "docker"
+)
+_COMPOSE_ARGS = [] if shutil.which("docker-compose") else ["compose"]
 
 IMAGE_BUILDS = [
     ("ot-range-process-sim", "process_sim/Dockerfile", "."),
@@ -88,7 +99,7 @@ def _compose(project: str, *args: str, timeout: float = 300.0) -> subprocess.Com
         "ZONE_OPS_SUBNET": "10.31.0.0/24",
     }
     return subprocess.run(
-        ["docker-compose", "-p", project, "-f", str(COMPOSE_FILE), *args],
+        [_COMPOSE_CMD, *_COMPOSE_ARGS, "-p", project, "-f", str(COMPOSE_FILE), *args],
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
