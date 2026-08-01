@@ -99,8 +99,18 @@ make up     # builds and starts the full stack, waits until ready
 |---|---|---|
 | OpenPLC web UI | http://localhost:8080 | `openplc` / `openplc` |
 | OpenPLC Modbus interface | `localhost:502` | — |
+| process-sim Modbus interface | `localhost:5502` | — |
 | HMI (operator display) | http://localhost:8090 | — |
 | Grafana (historian dashboards) | http://localhost:3000 | `admin` / `admin` |
+
+`modctl` works against either interface — OpenPLC mirrors field I/O at
+different addresses than process-sim's own direct map, so point at the
+right map for whichever port you use:
+
+```bash
+.venv/bin/python -m tools.modctl --port 502 --map plc/modbus-map-openplc.yml read LT_101
+.venv/bin/python -m tools.modctl --port 5502 read LT_101   # process-sim direct, default map
+```
 
 Default credentials are exactly the kind the scenario library's attacks
 rely on — see [`SECURITY.md`](SECURITY.md). `make down` tears the stack

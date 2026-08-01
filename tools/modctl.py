@@ -117,6 +117,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--host", default=DEFAULT_HOST)
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
+    parser.add_argument(
+        "--map",
+        default=None,
+        help=(
+            "Point map to use (default plc/modbus-map.yml, for talking to "
+            "process-sim directly on --port 5502). Pass "
+            "plc/modbus-map-openplc.yml when --port targets OpenPLC (502) "
+            "instead — OpenPLC mirrors field I/O at different addresses; "
+            "see that file's own comments."
+        ),
+    )
     sub = parser.add_subparsers(dest="command", required=True)
 
     sub.add_parser("points", help="List every point in the point map")
@@ -139,7 +150,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    pm = load_pointmap()
+    pm = load_pointmap(args.map) if args.map else load_pointmap()
     handlers = {
         "points": cmd_points,
         "read": cmd_read,
