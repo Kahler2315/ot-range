@@ -2,7 +2,7 @@
         scenario scenario-S01 scenario-S03 scenario-S05 scenario-S06 \
         scenario-S01-docker scenario-S03-docker \
         detect learn-baseline lint security clean \
-        up down logs
+        up down reset status logs
 
 VENV := .venv
 PYTHON := $(VENV)/bin/python
@@ -107,6 +107,17 @@ up:
 
 down:
 	$(COMPOSE) down
+
+reset:
+	# Wipes Postgres and the Zeek/Suricata log volume, then restarts
+	# against the images already built by `make up` — no rebuild, so
+	# this is fast enough to run between back-to-back scenarios.
+	$(COMPOSE) down -v
+	$(COMPOSE) up --wait
+	@echo "State reset: fresh postgres, fresh zeek-logs volume."
+
+status:
+	$(PYTHON) tools/status.py
 
 logs:
 	$(COMPOSE) logs -f

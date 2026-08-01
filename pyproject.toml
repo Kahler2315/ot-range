@@ -41,6 +41,9 @@ known-first-party = ["common", "process_sim", "sensor", "tools", "attacker", "te
 # (make/bash targets already in this repo) — no shell, no external or
 # user-controlled input reaches subprocess.run's argument list.
 "scenarios/menu.py" = ["S603", "S607"]
+# "docker inspect" as a bare command, no shell — same reasoning as the
+# docker-cli entries above.
+"tools/status.py" = ["S603", "S607"]
 # OpenPLC's shipped default credential (openplc/openplc), not a secret —
 # see docs/openplc-integration.md. E501: the inline nosemgrep rule IDs
 # that suppress the corresponding semgrep finding are unavoidably long.

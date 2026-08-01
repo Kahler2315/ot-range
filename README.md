@@ -92,7 +92,9 @@ wired — plus an HMI and a historian feeding Grafana dashboards. Requires
 Docker.
 
 ```bash
-make up     # builds and starts the full stack, waits until ready
+make up      # builds and starts the full stack, waits until ready
+make status  # health checklist: containers, ports, web UIs — what's up, what isn't
+make reset   # wipe postgres + zeek-log state, restart clean, no rebuild
 ```
 
 | Service | URL | Login |
@@ -114,7 +116,8 @@ right map for whichever port you use:
 
 Default credentials are exactly the kind the scenario library's attacks
 rely on — see [`SECURITY.md`](SECURITY.md). `make down` tears the stack
-down. See [`docs/openplc-integration.md`](docs/openplc-integration.md)
+down (`make reset` if you just want clean state without tearing down).
+See [`docs/openplc-integration.md`](docs/openplc-integration.md)
 for how OpenPLC is wired and what was verified.
 
 ## Run scenarios over a real, zone-segmented network
