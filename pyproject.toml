@@ -37,6 +37,10 @@ known-first-party = ["common", "process_sim", "sensor", "tools", "attacker", "te
 # "ip" as a bare command, no shell, no external input — same reasoning
 # as the docker-cli entries above. Runs inside the router container only.
 "router/find_iface.py" = ["S607"]
+# Interactive menu dispatches to a fixed, hardcoded table of commands
+# (make/bash targets already in this repo) — no shell, no external or
+# user-controlled input reaches subprocess.run's argument list.
+"scenarios/menu.py" = ["S603", "S607"]
 # OpenPLC's shipped default credential (openplc/openplc), not a secret —
 # see docs/openplc-integration.md. E501: the inline nosemgrep rule IDs
 # that suppress the corresponding semgrep finding are unavoidably long.

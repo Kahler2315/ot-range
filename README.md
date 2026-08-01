@@ -159,6 +159,15 @@ make scenario-S06   # default credentials, program upload, safety disabled
 Each ships with a briefing, expected impact, detection writeup, and an
 instructor answer key.
 
+```bash
+make scenario   # interactive picker: browse scenarios, pick one, run it
+```
+
+Lists every scenario with its hook, process impact, and what catches
+it, then dispatches to the right runner (loopback or docker) for you —
+no need to remember which `run_scenario.sh` / `make scenario-*` target
+goes with which scenario.
+
 | | Scenario | Process impact | Caught by |
 |---|---|---|---|
 | **S01** | [Recon & point enumeration](scenarios/S01-recon/) | None — that's the lesson | 4 rules |
