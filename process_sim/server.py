@@ -51,17 +51,31 @@ FC_DISCRETE_INPUT = 2
 FC_HOLDING_REGISTER = 3
 FC_INPUT_REGISTER = 4
 
+# S05 (Manipulation of View): an undocumented holding register, not part
+# of plc/modbus-map.yml or any legitimate operator screen. See
+# PlantRunner._lt101_spoof_override for why this exists and what it
+# represents. Deliberately far from the real point map's addresses
+# (1-5) so it reads as "found via recon," not "next to the real points."
+LT101_SPOOF_HR_INDEX = 99
+
 
 def _table_size(pm: PointMap, table: str) -> int:
     points = pm.table(table)
     return max((p.index for p in points), default=-1) + 1
 
 
-def build_context(pm: PointMap) -> tuple[ModbusServerContext, ModbusSlaveContext]:
-    """Build the pymodbus datastore, sized and defaulted from the point map."""
+def build_context(
+    pm: PointMap, *, min_holding_registers: int = 0
+) -> tuple[ModbusServerContext, ModbusSlaveContext]:
+    """Build the pymodbus datastore, sized and defaulted from the point map.
 
-    def block(table: str, is_bool: bool) -> ModbusSequentialDataBlock:
-        size = _table_size(pm, table)
+    min_holding_registers reserves extra holding-register slots beyond
+    what the point map itself declares — used by the default (combined)
+    mode to make room for S05's undocumented spoof register.
+    """
+
+    def block(table: str, is_bool: bool, min_size: int = 0) -> ModbusSequentialDataBlock:
+        size = max(_table_size(pm, table), min_size)
         values: list[bool | int] = [False if is_bool else 0] * size
         for p in pm.table(table):
             if p.default is None:
@@ -73,7 +87,7 @@ def build_context(pm: PointMap) -> tuple[ModbusServerContext, ModbusSlaveContext
         co=block("coils", is_bool=True),
         di=block("discrete_inputs", is_bool=True),
         ir=block("input_registers", is_bool=False),
-        hr=block("holding_registers", is_bool=False),
+        hr=block("holding_registers", is_bool=False, min_size=min_holding_registers),
         zero_mode=True,
     )
     context = ModbusServerContext(slaves=slave, single=True)
@@ -162,6 +176,25 @@ class PlantRunner:
 
         return pump_run, valve_open, cl_run, sp_speed, sp_dose
 
+    def _lt101_spoof_override(self) -> int | None:
+        """S05 (Manipulation of View): an undocumented holding register
+        that, if written nonzero, overrides what LT_101 reports on the
+        wire from that tick on. Not part of plc/modbus-map.yml or any
+        legitimate operator screen — an attacker only learns it exists
+        via deep recon (S02-style project file exfiltration), mirroring
+        T0856 Spoof Reporting Message.
+
+        LT_101 can't be attacked with a simple unauthorized write the
+        way S03 attacks coils: it's an FC04 input register, which the
+        Modbus protocol makes read-only over the wire — there's no write
+        function code that targets input registers at all. The lie has
+        to be injected at the reporting device, not the message.
+        """
+        if self.field_only:
+            return None
+        raw = self.slave.getValues(FC_HOLDING_REGISTER, LT101_SPOOF_HR_INDEX, 1)[0]
+        return raw if raw != 0 else None
+
     def _field_scan(self) -> tuple[bool, bool, bool, float, float]:
         """Field-only mode: no logic at all. Every actuator coil is a raw
         command from whatever external master is polling this device
@@ -190,7 +223,11 @@ class PlantRunner:
             cl_dose_setpoint_mg_l=sp_dose,
         )
 
-        self._set_input_register("LT_101", state.level_pct)
+        lt101_p = self.pm["LT_101"]
+        spoof_raw = self._lt101_spoof_override()
+        lt101_raw = spoof_raw if spoof_raw is not None else lt101_p.encode(state.level_pct)
+        self.slave.setValues(FC_INPUT_REGISTER, lt101_p.index, [lt101_raw])
+
         self._set_input_register("FT_201", state.flow_lpm)
         self._set_input_register("AIT_301", state.chlorine_mg_l)
         self._set_input_register("IT_101", state.pump_current_a)
@@ -211,7 +248,8 @@ async def main_async(args: argparse.Namespace) -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
     map_path = args.map or (FIELD_MAP_PATH if args.field_only else None)
     pm = load_pointmap(map_path) if map_path else load_pointmap()
-    context, slave = build_context(pm)
+    min_hr = 0 if args.field_only else LT101_SPOOF_HR_INDEX + 1
+    context, slave = build_context(pm, min_holding_registers=min_hr)
     runner = PlantRunner(
         pm,
         slave,

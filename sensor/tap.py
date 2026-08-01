@@ -103,7 +103,23 @@ def frame_to_record(
         record["quantity"] = quantity
     if frame.exception is not None:
         record["exception"] = frame.exception_name
+    if frame.raw_data is not None and quantity:
+        record["values"] = decode_values(frame.func, frame.raw_data, quantity)
     return record
+
+
+def decode_values(func: int, raw_data: bytes, quantity: int) -> list[bool] | list[int]:
+    """Decode a read response's payload into actual point values —
+    packed bits for coils/discrete inputs (func 1/2), big-endian words
+    for registers (func 3/4). Needed for S05: catching a spoofed value
+    requires seeing the value, not just that a read happened.
+    """
+    if func in (1, 2):
+        return [bool((raw_data[i // 8] >> (i % 8)) & 1) for i in range(quantity)]
+    if func in (3, 4):
+        count = min(quantity, len(raw_data) // 2)
+        return [int.from_bytes(raw_data[i * 2 : i * 2 + 2], "big") for i in range(count)]
+    return []
 
 
 class ModbusTap:

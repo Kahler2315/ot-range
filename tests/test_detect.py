@@ -29,6 +29,8 @@ def record(
     pdu_type="request",
     is_write=False,
     exception=None,
+    func_code=None,
+    values=None,
 ):
     rec = {
         "ts": 1.0,
@@ -48,6 +50,10 @@ def record(
         rec["quantity"] = quantity
     if exception is not None:
         rec["exception"] = exception
+    if func_code is not None:
+        rec["func_code"] = func_code
+    if values is not None:
+        rec["values"] = values
     return rec
 
 
@@ -238,3 +244,78 @@ def test_shipped_baseline_loads_and_is_usable():
     loaded = Baseline.load(DEFAULT_BASELINE_PATH)
     assert loaded.allowed, "shipped baseline must define at least one allowed tuple"
     assert loaded.known_source(HMI)
+
+
+def lshh_response(tripped, source=HMI):
+    return record(
+        source=source,
+        func="READ_DISCRETE_INPUTS",
+        func_code=2,
+        address=0,
+        pdu_type="response",
+        values=[tripped],
+    )
+
+
+def lt101_response(pct, source=HMI):
+    return record(
+        source=source,
+        func="READ_INPUT_REGISTERS",
+        func_code=4,
+        address=0,
+        pdu_type="response",
+        values=[round(pct * 100)],
+    )
+
+
+def test_view_manipulation_alerts_when_float_contradicts_transmitter(baseline):
+    alerts = Detector(baseline).analyze([lshh_response(True), lt101_response(50.0)])
+    view_alerts = [a for a in alerts if a.rule_id == "MODBUS_VIEW_MANIPULATION"]
+    assert len(view_alerts) == 1
+    assert view_alerts[0].severity == "critical"
+    assert view_alerts[0].technique.startswith("T0856")
+    assert view_alerts[0].evidence["lt_101_reported_pct"] == 50.0
+
+
+def test_view_manipulation_silent_when_readings_agree(baseline):
+    """LSHH tripped and LT_101 genuinely reporting a high level — no
+    contradiction, no alert. A real overflow must not trip this rule."""
+    alerts = Detector(baseline).analyze([lshh_response(True), lt101_response(98.5)])
+    assert "MODBUS_VIEW_MANIPULATION" not in rule_ids(alerts)
+
+
+def test_view_manipulation_silent_when_float_never_trips(baseline):
+    """A low LT_101 reading alone is completely normal — most of the
+    time, the tank just isn't full. Only the pairing is suspicious."""
+    alerts = Detector(baseline).analyze([lshh_response(False), lt101_response(50.0)])
+    assert "MODBUS_VIEW_MANIPULATION" not in rule_ids(alerts)
+
+
+def test_view_manipulation_ignores_requests():
+    """Requests never carry values (only responses do) — must not crash
+    or false-positive on a log made up entirely of requests."""
+    baseline_obj = Baseline(allowed=[], thresholds=Thresholds())
+    alerts = Detector(baseline_obj).analyze(
+        [record(func="READ_DISCRETE_INPUTS", address=0), record(func="READ_INPUT_REGISTERS")]
+    )
+    assert "MODBUS_VIEW_MANIPULATION" not in rule_ids(alerts)
+
+
+def test_view_manipulation_fires_even_from_an_allowlisted_source(baseline):
+    """The whole point: unlike every other rule here, this one isn't
+    about who asked or whether the request looked routine — LT_101's
+    own value is physically inconsistent with LSHH_101's, regardless of
+    source. A read from the baselined HMI address must still trip it."""
+    alerts = Detector(baseline).analyze(
+        [lshh_response(True, source=HMI), lt101_response(50.0, source=HMI)]
+    )
+    assert "MODBUS_VIEW_MANIPULATION" in rule_ids(alerts)
+
+
+def test_view_manipulation_uses_the_lowest_contradicting_reading(baseline):
+    """Report the most damning evidence when there are several."""
+    alerts = Detector(baseline).analyze(
+        [lshh_response(True), lt101_response(80.0), lt101_response(20.0), lt101_response(60.0)]
+    )
+    view_alerts = [a for a in alerts if a.rule_id == "MODBUS_VIEW_MANIPULATION"]
+    assert view_alerts[0].evidence["lt_101_reported_pct"] == 20.0

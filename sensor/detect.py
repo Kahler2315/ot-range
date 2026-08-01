@@ -84,6 +84,11 @@ class Thresholds:
     unit_id_sweep_count: int = 3
     exception_rate: float = 0.2
     exception_min_responses: int = 10
+    # S05: LSHH_101 physically trips at 98% ground truth. Any LT_101
+    # reading below this while LSHH is tripped is a physical
+    # impossibility, not measurement noise — kept well clear of 98 so
+    # this doesn't false-positive on legitimate transient readings.
+    view_manipulation_max_pct: float = 90.0
 
 
 @dataclasses.dataclass
@@ -200,6 +205,7 @@ class Detector:
         alerts.extend(self._point_enumeration(records))
         alerts.extend(self._unit_id_sweep(records))
         alerts.extend(self._exception_spike(records))
+        alerts.extend(self._view_manipulation(records))
         return sorted(alerts, key=lambda a: SEVERITY_ORDER.get(a.severity, 9))
 
     def _requests(self, records: Iterable[dict]) -> list[dict]:
@@ -401,6 +407,64 @@ class Detector:
                     )
                 )
         return alerts
+
+    def _view_manipulation(self, records: Iterable[dict]) -> list[Alert]:
+        """S05: cross-check two independent descriptions of the same
+        physical thing. LSHH_101 is a hardwired float switch — nothing
+        on the network can make it report tripped unless the tank is
+        physically almost full. LT_101 is the analog transmitter's
+        report of the same level, over the wire, spoofable. If the float
+        says tripped while the transmitter reports a comfortable level,
+        they can't both be true, and the float is the one that can't
+        lie.
+
+        Deliberately not source- or baseline-scoped like the other
+        rules: this doesn't care who asked or whether the read looked
+        routine, only whether the two answers the process gave are
+        physically possible together. That's what makes it catch a lie
+        the allowlist-based rules structurally cannot — a read from a
+        legitimate, baselined source, asking for exactly the point it's
+        supposed to ask for, just getting back a false answer.
+        """
+        lshh_tripped = False
+        low_level_reads: list[tuple[dict, float]] = []
+        limit = self.baseline.thresholds.view_manipulation_max_pct
+
+        for record in records:
+            if record.get("pdu_type") != "response" or "values" not in record:
+                continue
+            values = record["values"]
+            if not values:
+                continue
+
+            if record.get("func_code") == 2 and record.get("address") == 0:  # LSHH_101
+                if values[0]:
+                    lshh_tripped = True
+            elif record.get("func_code") == 4 and record.get("address") == 0:  # LT_101
+                level_pct = values[0] / 100
+                if level_pct < limit:
+                    low_level_reads.append((record, level_pct))
+
+        if not (lshh_tripped and low_level_reads):
+            return []
+
+        record, level_pct = min(low_level_reads, key=lambda pair: pair[1])
+        return [
+            Alert(
+                rule_id="MODBUS_VIEW_MANIPULATION",
+                severity="critical",
+                scenario="S05",
+                technique="T0856 Spoof Reporting Message",
+                message=(
+                    "Physical contradiction: the hardwired high-high float "
+                    f"(LSHH_101) tripped while the analog transmitter (LT_101) "
+                    f"reported {level_pct:.1f}% — these cannot both be true. "
+                    "LT_101 is being spoofed."
+                ),
+                source=record.get("id.resp_h", "unknown"),
+                evidence={"lt_101_reported_pct": level_pct, "lshh_101_tripped": True},
+            )
+        ]
 
 
 def main() -> int:

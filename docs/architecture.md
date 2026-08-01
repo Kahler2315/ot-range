@@ -156,13 +156,24 @@ pump deadheads and faults. *ATT&CK:* T0855, T0831, T0826.
 small increments over hours. Not signature-based — needs historian trend
 analysis. *ATT&CK:* T0836, T0831.
 
-**S05 — Manipulation of view (flagship).** Process runs unsafe while the
-HMI and reported values show normal. *ATT&CK:* T0832, T0856, T0815.
-Detection is a cross-check across independent sources: sensor-observed
-registers vs. what the HMI renders vs. what the historian stores vs. the
-hardwired float switch. This is the single highest-value teaching moment
-in the range — an analyst who trusts the screen fails, one who correlates
-across layers catches it.
+**S05 — Manipulation of view (flagship). ✅ Built.** Process runs unsafe
+while the HMI and reported values show normal. *ATT&CK:* T0832, T0856,
+T0815. As built: `LT_101` is a Modbus input register (FC04), which the
+protocol makes read-only over the wire — there's no write function code
+that targets it, so the lie can't be a simple unauthorized write the way
+S03 attacks a coil. It's injected at the field device itself, via an
+undocumented holding register not in `plc/modbus-map.yml` or on any
+operator screen (`LT101_SPOOF_HR_INDEX`, `process_sim/server.py`).
+Detection is two-layered: the arming write is still caught by the same
+baseline-allowlist mechanism S03 uses (defense in depth), and a new
+cross-consistency rule (`MODBUS_VIEW_MANIPULATION`) compares the
+hardwired float (`LSHH_101`) against the reported transmitter value
+(`LT_101`) independent of source — see `docs/coverage-matrix.md` and
+`scenarios/S05-manipulation-of-view/`. Historian/HMI-rendered legs of the
+cross-check are future work once M3 lands; the network-vs-hardwired-float
+leg alone is enough to teach the lesson. This is the single highest-value
+teaching moment in the range — an analyst who trusts the screen fails,
+one who correlates across independent sources catches it.
 
 ### Tier 3 — Control logic and denial
 
@@ -209,10 +220,10 @@ scenario it covers, with a published coverage matrix so gaps are visible.
 | **M0** | Repo skeleton, README, license, CI shell, security tooling wired up before any real code | Lint and secret scanning pass on an empty repo |
 | **M1** | Process sim + Modbus map + Modbus slave + CLI | You can watch a tank fill from the terminal |
 | **M1.5** | ✅ OpenPLC integration, control logic moves from Python to IEC 61131-3 | Done — S06 viability confirmed end to end, see `docs/openplc-integration.md` |
-| **M2** | FUXA HMI driving the process | Demoable to a non-technical person |
+| **M2** | ✅ HMI driving the process | Done — custom (`hmi/`), not FUXA; demoable to a non-technical person |
 | **M3** | Historian + Grafana dashboards | Trends visible over hours |
 | **M4** | Zone networks, router container, Zeek + Suricata | `modbus.log` populating with clean baseline traffic |
-| **M5** | Scenarios S01, S03, S05 + detections + CI assertions | Each attack runs, each detection fires, CI proves it |
+| **M5** | ✅ Scenarios S01, S03, S05 + detections + CI assertions | Done — each attack runs, each detection fires, CI proves it |
 | **M6** | **Publish.** Docs, walkthroughs, coverage matrix | Someone else clones it and gets to S05 unaided |
 
 Everything after M6 — S02, S04, S06, S07, S08, second protocol, second

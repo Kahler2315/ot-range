@@ -2,14 +2,14 @@
 # Run one scenario end to end: start the plant behind the sensor, generate
 # normal HMI traffic, run the attack, then report what the sensor caught.
 #
-# Usage: scenarios/run_scenario.sh S01|S03
+# Usage: scenarios/run_scenario.sh S01|S03|S05
 #
 # Simulated range only. See SECURITY.md.
 set -euo pipefail
 
 SCENARIO="${1:-}"
 if [[ -z "$SCENARIO" ]]; then
-  echo "usage: $0 S01|S03" >&2
+  echo "usage: $0 S01|S03|S05" >&2
   exit 64
 fi
 
@@ -27,7 +27,8 @@ MODBUS_LOG="$LOG_DIR/modbus-${SCENARIO}.log"
 case "$SCENARIO" in
   S01) START_LEVEL=55; SPEED=60 ;;
   S03) START_LEVEL=90; SPEED=600 ;;
-  *) echo "unknown scenario: $SCENARIO (expected S01 or S03)" >&2; exit 64 ;;
+  S05) START_LEVEL=90; SPEED=600 ;;
+  *) echo "unknown scenario: $SCENARIO (expected S01, S03, or S05)" >&2; exit 64 ;;
 esac
 
 PIDS=()
@@ -86,6 +87,10 @@ case "$SCENARIO" in
     ;;
   S03)
     "$PYTHON" -m attacker.s03_unauthorized_command --port "$TAP_PORT" \
+      --source-ip "$ATTACKER_IP" --timeout 120 --poll 1.5
+    ;;
+  S05)
+    "$PYTHON" -m attacker.s05_manipulation_of_view --port "$TAP_PORT" \
       --source-ip "$ATTACKER_IP" --timeout 120 --poll 1.5
     ;;
 esac

@@ -21,6 +21,9 @@ this table is to make that impossible to hide.
 | **S03** Unauthorised command | T0855 Unauthorized Command Message | `MODBUS_UNAUTHORIZED_WRITE` | critical | `test_s03_unauthorized_command_is_detected` |
 | S03 | T0831 Manipulation of Control | `MODBUS_UNAUTHORIZED_WRITE` (mode coil) | critical | `test_s03_write_targets_the_pump_and_mode_coils` |
 | S03 | T0826 Loss of Availability | *(process impact, not network-detectable)* | — | `test_s03_reaches_overflow_and_pump_damage` |
+| **S05** Manipulation of view | T0855 Unauthorized Command Message | `MODBUS_UNAUTHORIZED_WRITE` (spoof-arming write) | critical | `test_s05_initial_spoof_write_is_also_caught_by_the_baseline_rule` |
+| S05 | T0856 Spoof Reporting Message | `MODBUS_VIEW_MANIPULATION` (LSHH_101 vs. LT_101 cross-check) | critical | `test_s05_manipulation_of_view_is_detected` |
+| S05 | T0832 Manipulation of View | *(process impact — the point of the scenario)* | — | `test_s05_reaches_hardwired_trip_while_reported_level_stays_frozen` |
 
 **False-positive guard:** `test_clean_run_produces_no_alerts` asserts a
 normal run of the plant generates zero alerts. Every rule above must
@@ -35,6 +38,7 @@ coexist with that.
 | `MODBUS_POINT_ENUMERATION` | Sweeping addresses outside baseline | Degrades as the attacker learns the point map and narrows their reads |
 | `MODBUS_UNIT_ID_SWEEP` | Device discovery | Trivially evaded by targeting one known unit ID |
 | `MODBUS_EXCEPTION_SPIKE` | Probing addresses that don't exist | Degrades to zero once the attacker knows the map |
+| `MODBUS_VIEW_MANIPULATION` | LSHH_101 tripped while LT_101 reports a comfortable level — a physical impossibility, checked regardless of source | Only as good as the specific point pair it's written for; doesn't generalize to a spoof of some other value with no independent hardwired cross-check |
 
 The last three are all *reconnaissance* detections and share a weakness:
 they measure the attacker's ignorance, so they fade as the attacker
@@ -48,8 +52,7 @@ been touched yet.
 |---|---|---|---|
 | **S02** Default creds / project exfil | T0812, T0822, T0859, T0845 | Auth from unexpected source; off-hours access; outbound volume anomaly | HTTP-layer sensor (see [`openplc-integration.md`](openplc-integration.md)) |
 | **S04** Setpoint drift | T0836, T0831 | Historian trend analysis — deliberately *not* signature-based | Historian (M3) |
-| **S05** Manipulation of view | T0832, T0856, T0815 | Cross-layer consistency: network-observed vs. HMI-rendered vs. historian vs. hardwired float | HMI (M2) + historian (M3) |
-| **S06** Logic modification, safety disabled | T0889, T0843, T0837, T0880 | Program upload outside maintenance window; logic checksum drift; runtime restart | OpenPLC (M1.5) |
+| **S06** Logic modification, safety disabled | T0889, T0843, T0837, T0880 | Program upload outside maintenance window; logic checksum drift; runtime restart | Mechanism proven end-to-end (`tests/test_openplc_integration.py::test_s06_program_swap_disables_interlock_even_in_auto_mode`); no `attacker/` script, sensor coverage of the HTTP upload path, or scenario docs yet |
 | **S07** Denial of control | T0813, T0814, T0827 | Connection rate/count anomaly; HMI polling gaps | — (buildable now) |
 | **S08** Replay | T0855, T0842 | Transaction ID reuse; command outside operational envelope | — (buildable now) |
 

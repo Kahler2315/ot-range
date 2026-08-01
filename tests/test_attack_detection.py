@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import pytest
 
+from process_sim.server import LT101_SPOOF_HR_INDEX
 from sensor.detect import Baseline, Detector
 from tests.harness import ATTACKER_SOURCE_IP, HMI_SOURCE_IP, running_range
 
@@ -165,3 +166,78 @@ def test_s03_write_targets_the_pump_and_mode_coils(tmp_path):
 
         addresses = set(write_alerts[0].evidence["addresses"])
         assert expected <= addresses, f"expected {expected} among attacked addresses {addresses}"
+
+
+def test_s05_manipulation_of_view_is_detected(tmp_path):
+    with running_range(tmp_path, level=90.0, speed=600.0) as rng:
+        rng.hmi_poll(cycles=5)
+
+        result = rng.run_module(
+            "attacker.s05_manipulation_of_view",
+            "--port",
+            str(rng.tap_port),
+            "--source-ip",
+            ATTACKER_SOURCE_IP,
+            "--timeout",
+            "90",
+            "--poll",
+            "1.0",
+        )
+        assert result.returncode == 0, f"attack did not reach full impact:\n{result.stdout}"
+
+        alerts = analyze(rng.records())
+        view_alerts = [a for a in alerts if a.rule_id == "MODBUS_VIEW_MANIPULATION"]
+
+        assert view_alerts, f"view manipulation not detected. fired: {rule_ids(alerts)}"
+        alert = view_alerts[0]
+        assert alert.severity == "critical"
+        assert alert.technique.startswith("T0856")
+        # The reported value is the whole lie — it must be nowhere near
+        # the physical high-high threshold the float actually tripped at.
+        assert alert.evidence["lt_101_reported_pct"] < 90.0
+
+
+def test_s05_reaches_hardwired_trip_while_reported_level_stays_frozen(tmp_path):
+    """The attack must actually diverge from reality, not just send
+    packets — the hardwired float has to trip for real while LT_101
+    never leaves the spoofed value."""
+    with running_range(tmp_path, level=90.0, speed=600.0) as rng:
+        result = rng.run_module(
+            "attacker.s05_manipulation_of_view",
+            "--port",
+            str(rng.tap_port),
+            "--source-ip",
+            ATTACKER_SOURCE_IP,
+            "--timeout",
+            "90",
+            "--poll",
+            "1.0",
+        )
+        assert result.returncode == 0, result.stdout
+        assert "LSHH_101 (hardwired) TRIPPED" in result.stdout
+        assert "LT_101 ever left 50%   : False" in result.stdout
+
+
+def test_s05_initial_spoof_write_is_also_caught_by_the_baseline_rule(tmp_path):
+    """Defense in depth: arming the spoof is itself a write to an address
+    outside the published point map, from an unrecognised source — the
+    same baseline-allowlist mechanism that catches S03 should flag it,
+    independent of whether the cross-consistency rule also fires. If an
+    analyst only sees this alert (e.g. missed the later contradiction in
+    a noisy log), they still had a chance to catch the attack."""
+    with running_range(tmp_path, level=90.0, speed=600.0) as rng:
+        rng.run_module(
+            "attacker.s05_manipulation_of_view",
+            "--port",
+            str(rng.tap_port),
+            "--source-ip",
+            ATTACKER_SOURCE_IP,
+            "--timeout",
+            "90",
+            "--poll",
+            "1.0",
+        )
+        alerts = analyze(rng.records())
+        write_alerts = [a for a in alerts if a.rule_id == "MODBUS_UNAUTHORIZED_WRITE"]
+        assert write_alerts, f"spoof-arming write not caught. fired: {rule_ids(alerts)}"
+        assert any(LT101_SPOOF_HR_INDEX in a.evidence.get("addresses", []) for a in write_alerts)

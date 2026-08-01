@@ -1,5 +1,5 @@
 .PHONY: setup sim tap hmi points dump watch test test-e2e test-docker smoke \
-        scenario-S01 scenario-S03 detect learn-baseline lint security clean \
+        scenario-S01 scenario-S03 scenario-S05 detect learn-baseline lint security clean \
         up down logs
 
 VENV := .venv
@@ -46,6 +46,9 @@ scenario-S01:
 
 scenario-S03:
 	$(PYTHON) -m attacker.s03_unauthorized_command --port 5020 --source-ip 127.0.0.2
+
+scenario-S05:
+	$(PYTHON) -m attacker.s05_manipulation_of_view --port 5020 --source-ip 127.0.0.2
 
 detect:
 	$(PYTHON) -m sensor.detect $(MODBUS_LOG)

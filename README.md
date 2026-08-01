@@ -28,8 +28,9 @@ simulated environment only.
 ## Status
 
 Working today: the simulated plant, a real OpenPLC controller running
-compiled IEC 61131-3 logic, a Modbus TCP sensor, two attack scenarios
-with full teaching material, and detections for both that are asserted
+compiled IEC 61131-3 logic, an HMI, a Modbus TCP sensor, three attack
+scenarios with full teaching material — including the flagship
+manipulation-of-view scenario — and detections for all of them asserted
 to fire in CI.
 
 | Milestone | State |
@@ -37,8 +38,9 @@ to fire in CI.
 | M0 repo scaffold + security gates | done |
 | M1 process sim, Modbus slave, CLI | done |
 | M1.5 real OpenPLC running compiled control logic, S06 attack path proven | done — see [`docs/openplc-integration.md`](docs/openplc-integration.md) |
-| M5 (partial) S01 + S03, sensor, detections, CI assertions | done |
-| M2 FUXA HMI · M3 historian + Grafana · M4 zone networks + Zeek | not started |
+| M2 HMI (custom, not FUXA — see [`docs/architecture.md`](docs/architecture.md) open question 1) | done |
+| M5 (partial) S01 + S03 + S05, sensor, detections, CI assertions | done |
+| M3 historian + Grafana · M4 zone networks + Zeek | not started |
 
 See [`docs/architecture.md`](docs/architecture.md) for the full design and
 [`docs/coverage-matrix.md`](docs/coverage-matrix.md) for exactly what is
@@ -48,7 +50,7 @@ detected and what isn't.
 
 ```bash
 make setup                        # venv + deps + pre-commit hooks
-bash scenarios/run_scenario.sh S03  # watch an attack overflow the tank, and get caught
+bash scenarios/run_scenario.sh S05  # watch the tank overflow while every screen reads normal
 ```
 
 That one command starts the plant, puts a sensor in front of it,
@@ -100,6 +102,7 @@ instructor answer key.
 |---|---|---|---|
 | **S01** | [Recon & point enumeration](scenarios/S01-recon/) | None — that's the lesson | 4 rules |
 | **S03** | [Unauthorised command](scenarios/S03-unauthorized-command/) | Tank overflows, pump destroys itself | `MODBUS_UNAUTHORIZED_WRITE` (critical) |
+| **S05** | [Manipulation of view](scenarios/S05-manipulation-of-view/) (flagship) | Tank overflows for real while every screen reads a calm 50% | `MODBUS_VIEW_MANIPULATION` (critical) — hardwired float vs. spoofed transmitter |
 
 ## Tests
 

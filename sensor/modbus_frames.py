@@ -57,6 +57,7 @@ class ModbusFrame:
     address: int | None = None
     quantity: int | None = None
     exception: int | None = None
+    raw_data: bytes | None = None
 
     @property
     def func_name(self) -> str:
@@ -141,7 +142,22 @@ def parse_frame(data: bytes, is_request: bool) -> ModbusFrame | None:
         raw_len=len(data),
         address=address,
         quantity=quantity,
+        raw_data=_parse_read_response_data(func, payload, is_request),
     )
+
+
+def _parse_read_response_data(func: int, payload: bytes, is_request: bool) -> bytes | None:
+    """The actual values a read response carried — byte-packed bits for
+    coils/discrete inputs (func 1/2), big-endian words for registers
+    (func 3/4) — undecoded. Only populated for read responses; sensor/
+    tap.py does the decoding once it knows the point count from the
+    correlated request. Nothing else needs this, so requests and writes
+    are left alone rather than adding noise nobody reads.
+    """
+    if is_request or func not in (1, 2, 3, 4) or len(payload) < 1:
+        return None
+    byte_count = payload[0]
+    return payload[1 : 1 + byte_count]
 
 
 def _parse_address_quantity(

@@ -158,3 +158,31 @@ def test_write_response_echoes_address():
     frame = parse_frame(response, False)
     assert frame.address == 5
     assert frame.is_write is True
+
+
+def test_read_register_response_carries_raw_data():
+    """S05 needs the actual value, not just that a read happened."""
+    response = build_frame(1, 0, 4, b"\x02\x21\x34")  # byte_count=2, value=0x2134
+    frame = parse_frame(response, False)
+    assert frame.raw_data == b"\x21\x34"
+
+
+def test_read_discrete_response_carries_raw_data():
+    response = build_frame(1, 0, 2, b"\x01\x01")  # byte_count=1, one bit set
+    frame = parse_frame(response, False)
+    assert frame.raw_data == b"\x01"
+
+
+def test_read_request_has_no_raw_data():
+    """Requests never carry a value — only responses do."""
+    frame = parse_frame(read_request(func=4), True)
+    assert frame.raw_data is None
+
+
+def test_write_response_has_no_raw_data():
+    """raw_data is scoped to read responses (func 1-4) — write echoes
+    already carry their value via .address/.quantity, adding raw_data
+    there too would just be a second way to read the same bytes."""
+    response = build_frame(1, 0, 6, (5).to_bytes(2, "big") + (99).to_bytes(2, "big"))
+    frame = parse_frame(response, False)
+    assert frame.raw_data is None
