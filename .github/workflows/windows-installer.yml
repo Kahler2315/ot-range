@@ -1,0 +1,41 @@
+name: windows-installer
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "installer/**"
+      - ".github/workflows/windows-installer.yml"
+  pull_request:
+    paths:
+      - "installer/**"
+      - ".github/workflows/windows-installer.yml"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    # Real Windows, not an emulator — this is what actually validates
+    # the .iss script compiles, not just "looks right" on a Linux dev
+    # machine. Does not validate WSL2/Docker Desktop runtime behavior;
+    # GitHub-hosted Windows runners don't support that. See
+    # installer/ot-range.iss's own header for what is and isn't verified.
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Inno Setup
+        run: choco install innosetup -y --no-progress
+
+      - name: Compile installer
+        run: iscc installer\ot-range.iss
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: OT-Range-Setup
+          path: installer\dist\OT-Range-Setup.exe
+          if-no-files-found: error
