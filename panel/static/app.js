@@ -8,7 +8,56 @@ const STATUS_LABELS = {
   "ot-range-router-1": "router",
 };
 
-let refreshTimer = null;
+const SOLVED_KEY = "ot-range-flags-solved";
+let FLAGS = {}; // { scenarioId: [{id, prompt, hint}, ...] }
+
+function loadSolved() {
+  try {
+    return JSON.parse(localStorage.getItem(SOLVED_KEY) || "{}");
+  } catch {
+    return {};
+  }
+}
+
+function saveSolved(solved) {
+  localStorage.setItem(SOLVED_KEY, JSON.stringify(solved));
+}
+
+function markSolved(scenarioId, flagId) {
+  const solved = loadSolved();
+  solved[scenarioId] = solved[scenarioId] || [];
+  if (!solved[scenarioId].includes(flagId)) solved[scenarioId].push(flagId);
+  saveSolved(solved);
+}
+
+function renderFlagCounts() {
+  const solved = loadSolved();
+  let totalFlags = 0;
+  let totalSolved = 0;
+  for (const [scenarioId, flags] of Object.entries(FLAGS)) {
+    const solvedForScenario = (solved[scenarioId] || []).filter((id) =>
+      flags.some((f) => f.id === id)
+    ).length;
+    totalFlags += flags.length;
+    totalSolved += solvedForScenario;
+    const el = document.querySelector(`[data-flag-count="${scenarioId}"]`);
+    if (el) {
+      el.textContent = `flags ${solvedForScenario}/${flags.length}`;
+      el.classList.toggle("complete", solvedForScenario === flags.length && flags.length > 0);
+    }
+  }
+  document.getElementById("flags-total").textContent = `${totalSolved} / ${totalFlags}`;
+}
+
+async function loadFlags() {
+  try {
+    const resp = await fetch("/api/flags");
+    FLAGS = await resp.json();
+    renderFlagCounts();
+  } catch (err) {
+    console.error("could not load flags", err);
+  }
+}
 
 function renderStatus(data) {
   const grid = document.getElementById("status-grid");
@@ -141,31 +190,104 @@ function wireScenarioButtons() {
   }
 }
 
+function openModal(title) {
+  document.getElementById("modal-title").textContent = title;
+  document.getElementById("modal-overlay").style.display = "flex";
+}
+
 function wireDocLinks() {
-  const overlay = document.getElementById("modal-overlay");
-  const title = document.getElementById("modal-title");
   const body = document.getElementById("modal-body");
   for (const link of document.querySelectorAll(".doc-links a")) {
     link.addEventListener("click", async () => {
       const scenario = link.dataset.scenario;
       const doc = link.dataset.doc;
-      title.textContent = `${scenario} — ${link.textContent}`;
+      openModal(`${scenario} — ${link.textContent}`);
       body.textContent = "loading…";
-      overlay.style.display = "flex";
+      body.style.whiteSpace = "pre-wrap";
       const resp = await fetch(`/api/docs/${scenario}/${doc}`);
       body.textContent = resp.ok ? await resp.text() : "not found";
     });
   }
   document.getElementById("modal-close").addEventListener("click", () => {
-    overlay.style.display = "none";
+    document.getElementById("modal-overlay").style.display = "none";
   });
-  overlay.addEventListener("click", (ev) => {
-    if (ev.target === overlay) overlay.style.display = "none";
+  document.getElementById("modal-overlay").addEventListener("click", (ev) => {
+    if (ev.target.id === "modal-overlay") ev.target.style.display = "none";
   });
+}
+
+function renderFlagsModal(scenarioId) {
+  const body = document.getElementById("modal-body");
+  const flags = FLAGS[scenarioId] || [];
+  const solved = loadSolved()[scenarioId] || [];
+
+  openModal(`${scenarioId} — Flags`);
+  body.innerHTML = "";
+
+  for (const flag of flags) {
+    const row = document.createElement("div");
+    row.className = "flag-row";
+    const isSolved = solved.includes(flag.id);
+    row.innerHTML = `
+      <div class="flag-prompt">${flag.prompt}</div>
+      <div class="flag-input-row">
+        <input type="text" placeholder="your answer" ${isSolved ? 'class="correct"' : ""}
+               value="${isSolved ? "✓ captured" : ""}" ${isSolved ? "disabled" : ""}>
+        <button class="btn-primary check-btn">Check</button>
+        <span class="flag-status ${isSolved ? "correct" : ""}">${isSolved ? "✓" : ""}</span>
+      </div>
+      ${flag.hint ? `<div class="flag-hint"><button class="link hint-btn">hint</button><span class="hint-text" style="display:none"> ${flag.hint}</span></div>` : ""}
+    `;
+    body.appendChild(row);
+
+    const input = row.querySelector("input");
+    const status = row.querySelector(".flag-status");
+    const checkBtn = row.querySelector(".check-btn");
+    const hintBtn = row.querySelector(".hint-btn");
+
+    checkBtn.addEventListener("click", async () => {
+      const answer = input.value.trim();
+      if (!answer) return;
+      const resp = await fetch("/api/flags/check", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scenario: scenarioId, flag_id: flag.id, answer }),
+      });
+      const data = await resp.json();
+      if (data.correct) {
+        markSolved(scenarioId, flag.id);
+        input.classList.add("correct");
+        input.disabled = true;
+        status.textContent = "✓";
+        status.className = "flag-status correct";
+        renderFlagCounts();
+      } else {
+        status.textContent = "✕";
+        status.className = "flag-status wrong";
+      }
+    });
+    input.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter") checkBtn.click();
+    });
+    if (hintBtn) {
+      hintBtn.addEventListener("click", () => {
+        row.querySelector(".hint-text").style.display = "inline";
+        hintBtn.style.display = "none";
+      });
+    }
+  }
+}
+
+function wireFlagsLinks() {
+  for (const btn of document.querySelectorAll(".flags-link")) {
+    btn.addEventListener("click", () => renderFlagsModal(btn.dataset.scenario));
+  }
 }
 
 wireStackButtons();
 wireScenarioButtons();
 wireDocLinks();
+wireFlagsLinks();
 refreshStatus();
-refreshTimer = setInterval(refreshStatus, 4000);
+loadFlags();
+setInterval(refreshStatus, 4000);

@@ -26,6 +26,8 @@ from pathlib import Path
 from flask import Flask, Response, abort, jsonify, render_template, request
 
 from scenarios.catalog import SCENARIOS, SCENARIOS_BY_ID
+from scenarios.flags import FLAGS_BY_SCENARIO
+from scenarios.flags import check as check_flag
 from tools.status import docker_container_status, http_ok, tcp_open
 
 LOG = logging.getLogger("ot_range.panel")
@@ -158,6 +160,17 @@ def collect_status() -> dict:
 # --- routes ---
 
 
+# Per-scenario accent color: not arbitrary decoration — sky for recon
+# (informational), orange for a destructive-but-caught command, gold
+# for the flagship, red for S06's deliberately undetected gap.
+SCENARIO_COLORS = {
+    "S01": "#38bdf8",
+    "S03": "#fb923c",
+    "S05": "#fbbf24",
+    "S06": "#f87171",
+}
+
+
 @app.route("/")
 def index():
     scenarios = [
@@ -167,6 +180,7 @@ def index():
             "hook": s.hook,
             "impact": s.impact,
             "caught_by": s.caught_by,
+            "color": SCENARIO_COLORS.get(s.id, "#22d3ee"),
             "modes": [
                 {"label": m.label, "requires_docker": m.requires_docker_stack} for m in s.modes
             ],
@@ -242,6 +256,33 @@ def api_docs(scenario_id: str, doc: str):
     if not path.is_file():
         abort(404)
     return Response(path.read_text(), mimetype="text/plain")
+
+
+@app.route("/api/flags")
+def api_flags():
+    # Prompts and hints only — never the accepted answers. Checked
+    # server-side in api_flags_check so answers never sit in page
+    # source; that's the whole point of routing this through an API
+    # instead of just rendering FLAGS_BY_SCENARIO into the template.
+    return jsonify(
+        {
+            scenario_id: [{"id": f.id, "prompt": f.prompt, "hint": f.hint} for f in flags]
+            for scenario_id, flags in FLAGS_BY_SCENARIO.items()
+        }
+    )
+
+
+@app.route("/api/flags/check", methods=["POST"])
+def api_flags_check():
+    data = request.get_json(silent=True) or {}
+    scenario_id = data.get("scenario", "")
+    flag_id = data.get("flag_id", "")
+    answer = data.get("answer", "")
+    flags = FLAGS_BY_SCENARIO.get(scenario_id, [])
+    flag = next((f for f in flags if f.id == flag_id), None)
+    if flag is None:
+        return jsonify(error="unknown flag"), 404
+    return jsonify(correct=check_flag(flag, answer))
 
 
 def _is_wsl() -> bool:

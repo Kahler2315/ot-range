@@ -2,163 +2,262 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>OT Range — Control Panel</title>
   <style>
+    :root {
+      --bg: #0a0f18;
+      --bg-raise: #101828;
+      --panel: #131d2e;
+      --panel-border: #22314a;
+      --text: #e7edf6;
+      --text-dim: #8fa0b8;
+      --text-faint: #5c6d85;
+      --accent: #22d3ee;
+      --accent-dim: #0e5a68;
+      --good: #34d399;
+      --bad: #f87171;
+      --warn: #fbbf24;
+      --mono: 'Cascadia Code', 'JetBrains Mono', Consolas, monospace;
+    }
     * { box-sizing: border-box; }
     body {
-      background: #1a2332; color: #d8e1e8; font-family: 'Segoe UI', Arial, sans-serif;
-      margin: 0; padding: 24px 32px 120px;
+      background: radial-gradient(ellipse 1200px 600px at 20% -10%, #142132 0%, var(--bg) 55%);
+      color: var(--text); font-family: -apple-system, 'Segoe UI', Inter, Arial, sans-serif;
+      margin: 0; padding: 0 0 140px;
     }
-    a { color: #6fb8f2; }
-    h1 { font-size: 1.6rem; font-weight: 700; margin: 0 0 2px; color: #fff; }
-    .subtitle { color: #7f93a8; font-size: 0.88rem; margin-bottom: 22px; }
-    .subtitle a { color: #7f93a8; text-decoration: underline; }
+    a { color: var(--accent); }
 
-    section { margin-bottom: 28px; }
-    h2 {
-      font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em;
-      color: #7f93a8; font-weight: 700; margin: 0 0 12px;
+    header {
+      position: sticky; top: 0; z-index: 5;
+      background: rgba(10, 15, 24, 0.92); backdrop-filter: blur(8px);
+      border-bottom: 1px solid var(--panel-border);
+      padding: 16px 32px; display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
     }
+    .brand { display: flex; align-items: baseline; gap: 10px; }
+    .brand .mark {
+      font-weight: 800; letter-spacing: 0.02em; font-size: 1.25rem; color: #fff;
+    }
+    .brand .mark span { color: var(--accent); }
+    .brand .tagline { font-size: 0.78rem; color: var(--text-dim); }
+    header .spacer { flex: 1; }
+    .flags-chip {
+      display: flex; align-items: center; gap: 8px; background: var(--panel);
+      border: 1px solid var(--panel-border); border-radius: 20px; padding: 6px 14px;
+      font-size: 0.85rem; font-weight: 600;
+    }
+    .flags-chip .fill { color: var(--warn); }
+
+    main { padding: 24px 32px; max-width: 1400px; margin: 0 auto; }
+    section { margin-bottom: 30px; }
+    .eyebrow {
+      font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.09em;
+      color: var(--text-faint); font-weight: 700; margin: 0 0 12px;
+    }
+    .panel {
+      background: var(--panel); border: 1px solid var(--panel-border); border-radius: 12px;
+      padding: 18px 20px;
+    }
+    .security-note {
+      font-size: 0.82rem; color: var(--text-dim); margin: -14px 0 24px;
+    }
+    .security-note a { color: var(--text-dim); text-decoration: underline; }
+
+    .toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    button {
+      font-family: inherit; font-size: 0.86rem; font-weight: 600; border: none;
+      border-radius: 8px; padding: 10px 18px; cursor: pointer; transition: all 0.15s;
+      color: #061018;
+    }
+    button:disabled { opacity: 0.35; cursor: not-allowed; }
+    button:not(:disabled):hover { transform: translateY(-1px); filter: brightness(1.08); }
+    .btn-primary { background: var(--accent); color: #04222b; }
+    .btn-danger { background: var(--bad); color: #2b0908; }
+    .btn-warn { background: var(--warn); color: #2b1f04; }
+    .btn-ghost { background: transparent; color: var(--text-dim); border: 1px solid var(--panel-border); }
+    .busy-note { color: var(--warn); font-size: 0.84rem; display: none; }
 
     .status-grid {
-      display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-      gap: 10px;
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 8px;
     }
     .status-item {
-      background: #202b3d; border-radius: 8px; padding: 10px 14px;
-      display: flex; align-items: center; gap: 10px; font-size: 0.9rem;
+      display: flex; align-items: center; gap: 10px; font-size: 0.86rem;
+      padding: 9px 4px; border-bottom: 1px solid #1a2540;
     }
-    .dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; background: #4a5d75; }
-    .dot.ok { background: #2fbf71; }
-    .dot.bad { background: #cc3232; }
-    .status-item .label { color: #d8e1e8; }
-    .status-item a { margin-left: auto; font-size: 0.8rem; }
-
-    .stack-controls { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
-    button {
-      font-family: inherit; font-size: 0.88rem; font-weight: 600; border: none;
-      border-radius: 7px; padding: 9px 18px; cursor: pointer; transition: opacity 0.15s;
-      color: #fff;
+    .status-item:last-child { border-bottom: none; }
+    .dot {
+      width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; background: var(--text-faint);
+      box-shadow: 0 0 0 3px transparent;
     }
-    button:disabled { opacity: 0.4; cursor: not-allowed; }
-    button:not(:disabled):hover { opacity: 0.85; }
-    .btn-primary { background: #2f8fd6; }
-    .btn-danger { background: #a33; }
-    .btn-warn { background: #b8791f; }
-    .btn-ghost { background: #2c3a52; color: #b9c6d6; }
-    .busy-note { color: #d68f2f; font-size: 0.85rem; display: none; }
+    .dot.ok { background: var(--good); box-shadow: 0 0 8px 1px rgba(52,211,153,0.5); }
+    .dot.bad { background: var(--bad); box-shadow: 0 0 8px 1px rgba(248,113,113,0.4); }
+    .status-item a { margin-left: auto; font-size: 0.78rem; }
 
     .scenario-grid {
-      display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px;
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px;
     }
     .scenario-card {
-      background: #202b3d; border-radius: 10px; padding: 18px 20px;
-      border-left: 4px solid #4a5d75; display: flex; flex-direction: column; gap: 10px;
+      background: var(--panel); border: 1px solid var(--panel-border); border-radius: 12px;
+      padding: 18px 20px 16px; display: flex; flex-direction: column; gap: 10px;
+      border-top: 3px solid var(--accent-color, var(--accent)); transition: border-color 0.2s;
+      position: relative;
     }
+    .scenario-card .top-row { display: flex; align-items: center; justify-content: space-between; }
     .scenario-card .sid {
-      font-size: 0.72rem; font-weight: 700; letter-spacing: 0.06em; color: #6fb8f2;
+      font-family: var(--mono); font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em;
+      color: var(--accent-color, var(--accent));
+      background: color-mix(in srgb, var(--accent-color, var(--accent)) 15%, transparent);
+      padding: 2px 8px; border-radius: 5px;
     }
-    .scenario-card h3 { margin: 0; font-size: 1.05rem; color: #fff; }
-    .scenario-card .hook { color: #b9c6d6; font-size: 0.87rem; line-height: 1.4; }
-    .scenario-card .meta { font-size: 0.8rem; color: #7f93a8; line-height: 1.5; }
-    .scenario-card .meta b { color: #b9c6d6; font-weight: 600; }
-    .scenario-card .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 4px; }
+    .scenario-card .flag-count {
+      font-size: 0.74rem; color: var(--text-faint); font-family: var(--mono);
+    }
+    .scenario-card .flag-count.complete { color: var(--good); }
+    .scenario-card h3 { margin: 0; font-size: 1.08rem; color: #fff; }
+    .scenario-card .hook { color: var(--text-dim); font-size: 0.87rem; line-height: 1.45; }
+    .scenario-card .meta { font-size: 0.8rem; color: var(--text-dim); line-height: 1.55; }
+    .scenario-card .meta b { color: var(--text); font-weight: 600; }
+    .scenario-card .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 2px; }
     select {
-      background: #182231; color: #d8e1e8; border: 1px solid #3a4a63; border-radius: 6px;
-      padding: 7px 10px; font-size: 0.82rem; font-family: inherit; flex: 1; min-width: 140px;
+      background: var(--bg-raise); color: var(--text); border: 1px solid var(--panel-border);
+      border-radius: 7px; padding: 8px 10px; font-size: 0.82rem; font-family: inherit;
+      flex: 1; min-width: 140px;
     }
-    .doc-links { display: flex; gap: 12px; font-size: 0.78rem; }
-    .doc-links a { cursor: pointer; }
+    .doc-links { display: flex; gap: 14px; font-size: 0.78rem; flex-wrap: wrap; }
+    .doc-links a, .doc-links button.link {
+      cursor: pointer; background: none; border: none; padding: 0; font: inherit;
+      color: var(--accent); text-decoration: none;
+    }
+    .doc-links button.link.flags-link { color: var(--warn); font-weight: 700; }
 
     #console-wrap {
-      position: fixed; left: 0; right: 0; bottom: 0; background: #10161f;
-      border-top: 2px solid #2f8fd6; max-height: 40vh; display: none; flex-direction: column;
+      position: fixed; left: 0; right: 0; bottom: 0; background: #060a11;
+      border-top: 1px solid var(--panel-border); box-shadow: 0 -8px 30px rgba(0,0,0,0.5);
+      max-height: 42vh; display: none; flex-direction: column; z-index: 8;
     }
     #console-header {
-      display: flex; align-items: center; gap: 12px; padding: 8px 20px;
-      background: #16202f; font-size: 0.82rem; color: #b9c6d6;
+      display: flex; align-items: center; gap: 12px; padding: 10px 20px;
+      background: var(--bg-raise); font-size: 0.82rem; color: var(--text-dim);
+      border-bottom: 1px solid var(--panel-border);
     }
     #console-header .status-badge {
-      padding: 2px 10px; border-radius: 10px; font-weight: 700; font-size: 0.72rem;
+      padding: 3px 11px; border-radius: 10px; font-weight: 700; font-size: 0.72rem;
     }
-    .status-badge.running { background: #204e6b; color: #7fc4f2; }
-    .status-badge.ok { background: #204e35; color: #6fe39a; }
-    .status-badge.fail { background: #5c1f1f; color: #f28080; }
-    #console-close { margin-left: auto; background: none; color: #7f93a8; padding: 2px 8px; }
+    .status-badge.running { background: rgba(34,211,238,0.15); color: var(--accent); }
+    .status-badge.ok { background: rgba(52,211,153,0.15); color: var(--good); }
+    .status-badge.fail { background: rgba(248,113,113,0.15); color: var(--bad); }
+    #console-close { margin-left: auto; background: none; color: var(--text-faint); padding: 2px 8px; }
     #console-body {
-      overflow-y: auto; padding: 12px 20px; font-family: 'Cascadia Code', Consolas, monospace;
-      font-size: 0.8rem; white-space: pre-wrap; line-height: 1.5; color: #cfe0ee;
+      overflow-y: auto; padding: 14px 20px; font-family: var(--mono);
+      font-size: 0.8rem; white-space: pre-wrap; line-height: 1.55; color: #cfe3f5;
     }
 
     #modal-overlay {
-      display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6);
-      align-items: center; justify-content: center; z-index: 10;
+      display: none; position: fixed; inset: 0; background: rgba(4,7,12,0.72);
+      align-items: center; justify-content: center; z-index: 10; backdrop-filter: blur(2px);
     }
     #modal-box {
-      background: #1e2939; border-radius: 10px; width: min(700px, 90vw); max-height: 80vh;
-      display: flex; flex-direction: column; overflow: hidden;
+      background: var(--bg-raise); border: 1px solid var(--panel-border); border-radius: 14px;
+      width: min(720px, 92vw); max-height: 82vh; display: flex; flex-direction: column;
+      overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,0.5);
     }
-    #modal-title { padding: 14px 20px; font-weight: 700; border-bottom: 1px solid #2c3a52; }
+    #modal-title { padding: 16px 22px; font-weight: 700; border-bottom: 1px solid var(--panel-border); }
     #modal-body {
-      padding: 16px 20px; overflow-y: auto; white-space: pre-wrap;
-      font-family: 'Cascadia Code', Consolas, monospace; font-size: 0.82rem; line-height: 1.5;
+      padding: 18px 22px; overflow-y: auto; white-space: pre-wrap;
+      font-family: var(--mono); font-size: 0.82rem; line-height: 1.6;
     }
-    #modal-close { position: absolute; top: 10px; right: 16px; background: none; color: #7f93a8; }
+    #modal-close { position: absolute; top: 12px; right: 18px; background: none; color: var(--text-faint); }
+
+    /* flags modal */
+    .flag-row {
+      border-bottom: 1px solid var(--panel-border); padding: 14px 0; display: flex;
+      flex-direction: column; gap: 8px;
+    }
+    .flag-row:last-child { border-bottom: none; }
+    .flag-prompt { font-size: 0.9rem; line-height: 1.4; }
+    .flag-input-row { display: flex; gap: 8px; align-items: center; }
+    .flag-input-row input {
+      flex: 1; background: var(--bg); border: 1px solid var(--panel-border); border-radius: 7px;
+      padding: 8px 10px; color: var(--text); font-family: inherit; font-size: 0.85rem;
+    }
+    .flag-input-row input.correct { border-color: var(--good); }
+    .flag-status { font-size: 1rem; width: 22px; text-align: center; }
+    .flag-status.correct { color: var(--good); }
+    .flag-status.wrong { color: var(--bad); }
+    .flag-hint { font-size: 0.76rem; color: var(--text-faint); }
+    .flag-hint button.link { color: var(--text-faint); text-decoration: underline; }
   </style>
 </head>
 <body>
-  <h1>OT Range — Control Panel</h1>
-  <div class="subtitle">
-    Simulated environment — see <a href="https://github.com/Kahler2315/ot-range/blob/master/SECURITY.md" target="_blank">SECURITY.md</a>.
-    Every action here runs a command already documented in the README — nothing hidden.
-  </div>
-
-  <section>
-    <h2>Stack</h2>
-    <div class="stack-controls">
-      <button class="btn-primary" id="btn-up">Bring stack up</button>
-      <button class="btn-warn" id="btn-reset">Reset (wipe state)</button>
-      <button class="btn-danger" id="btn-down">Tear down</button>
-      <button class="btn-ghost" id="btn-refresh">Refresh status</button>
-      <span class="busy-note" id="busy-note">A command is already running — see the console below.</span>
+  <header>
+    <div class="brand">
+      <span class="mark">OT<span>RANGE</span></span>
+      <span class="tagline">Control Panel</span>
     </div>
-  </section>
+    <div class="spacer"></div>
+    <div class="flags-chip"><span>🏁</span><span><span class="fill" id="flags-total">—</span></span></div>
+  </header>
 
-  <section>
-    <h2>Status</h2>
-    <div class="status-grid" id="status-grid">
-      <div class="status-item"><span class="dot"></span><span class="label">Loading…</span></div>
+  <main>
+    <div class="security-note">
+      Simulated environment — see
+      <a href="https://github.com/Kahler2315/ot-range/blob/master/SECURITY.md" target="_blank">SECURITY.md</a>.
+      Every action here runs a command already documented in the README — nothing hidden.
     </div>
-  </section>
 
-  <section>
-    <h2>Scenarios</h2>
-    <div class="scenario-grid">
-      {% for s in scenarios %}
-      <div class="scenario-card">
-        <div class="sid">{{ s.id }}</div>
-        <h3>{{ s.title }}</h3>
-        <div class="hook">{{ s.hook }}</div>
-        <div class="meta"><b>Impact:</b> {{ s.impact }}</div>
-        <div class="meta"><b>Caught by:</b> {{ s.caught_by }}</div>
-        <div class="row">
-          <select data-scenario="{{ s.id }}">
-            {% for m in s.modes %}
-            <option value="{{ loop.index0 }}">{{ m.label }}</option>
-            {% endfor %}
-          </select>
-          <button class="btn-primary run-btn" data-scenario="{{ s.id }}">Run</button>
-        </div>
-        <div class="doc-links">
-          <a data-scenario="{{ s.id }}" data-doc="briefing">Briefing</a>
-          <a data-scenario="{{ s.id }}" data-doc="answer-key">Answer key</a>
-          <a data-scenario="{{ s.id }}" data-doc="detection">Detection</a>
-          <a data-scenario="{{ s.id }}" data-doc="expected-impact">Expected impact</a>
+    <section>
+      <div class="eyebrow">Stack</div>
+      <div class="panel toolbar">
+        <button class="btn-primary" id="btn-up">Bring stack up</button>
+        <button class="btn-warn" id="btn-reset">Reset (wipe state)</button>
+        <button class="btn-danger" id="btn-down">Tear down</button>
+        <button class="btn-ghost" id="btn-refresh">Refresh status</button>
+        <span class="busy-note" id="busy-note">A command is already running — see the console below.</span>
+      </div>
+    </section>
+
+    <section>
+      <div class="eyebrow">Status</div>
+      <div class="panel">
+        <div class="status-grid" id="status-grid">
+          <div class="status-item"><span class="dot"></span><span>Loading…</span></div>
         </div>
       </div>
-      {% endfor %}
-    </div>
-  </section>
+    </section>
+
+    <section>
+      <div class="eyebrow">Scenarios</div>
+      <div class="scenario-grid">
+        {% for s in scenarios %}
+        <div class="scenario-card" data-scenario="{{ s.id }}" style="--accent-color: {{ s.color }}">
+          <div class="top-row">
+            <span class="sid">{{ s.id }}</span>
+            <span class="flag-count" data-flag-count="{{ s.id }}">flags —</span>
+          </div>
+          <h3>{{ s.title }}</h3>
+          <div class="hook">{{ s.hook }}</div>
+          <div class="meta"><b>Impact:</b> {{ s.impact }}</div>
+          <div class="meta"><b>Caught by:</b> {{ s.caught_by }}</div>
+          <div class="row">
+            <select data-scenario="{{ s.id }}">
+              {% for m in s.modes %}
+              <option value="{{ loop.index0 }}">{{ m.label }}</option>
+              {% endfor %}
+            </select>
+            <button class="btn-primary run-btn" data-scenario="{{ s.id }}">Run</button>
+          </div>
+          <div class="doc-links">
+            <a data-scenario="{{ s.id }}" data-doc="briefing">Briefing</a>
+            <a data-scenario="{{ s.id }}" data-doc="answer-key">Answer key</a>
+            <a data-scenario="{{ s.id }}" data-doc="detection">Detection</a>
+            <a data-scenario="{{ s.id }}" data-doc="expected-impact">Expected impact</a>
+            <button class="link flags-link" data-scenario="{{ s.id }}">🏁 Flags</button>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </section>
+  </main>
 
   <div id="modal-overlay">
     <div id="modal-box" style="position: relative;">

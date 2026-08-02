@@ -67,6 +67,12 @@ and detection as it runs — no terminal commands to memorize. Everything
 it does is one of the `make` targets below, run for you; nothing
 hidden. See [`panel/app.py`](panel/app.py).
 
+Each scenario also has 5 short-answer flags (20 total) pulled straight
+from its own answer key — a concrete "did I actually find the thing"
+check, not just a pass/fail on running the attack script. Answers are
+checked server-side, so they're never sitting in the page source; the
+header tracks your running total. See [`scenarios/flags.py`](scenarios/flags.py).
+
 **Windows 10/11:** install [Docker Desktop](https://www.docker.com/products/docker-desktop/)
 with WSL2 enabled, and a WSL2 distro (Ubuntu is the default) — Docker
 Desktop needs this on Windows anyway, and this range's `router`
