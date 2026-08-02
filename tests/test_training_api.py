@@ -83,6 +83,9 @@ def test_answer_key_reveal_locks_independent_attempt_and_preserves_score(student
             "training_mode": "independent",
         },
     )
+    assert student_client.get("/api/docs/S01/answer-key").status_code == 403
+    transition = student_client.post("/api/docs/S01/answer-key/reveal")
+    assert transition.status_code == 200
     opened = student_client.get("/api/docs/S01/answer-key")
     assert opened.status_code == 200
     state = student_client.get("/api/training/S01").get_json()["state"]

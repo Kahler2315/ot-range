@@ -132,7 +132,7 @@ SCENARIOS = [
         id="S05",
         title="Manipulation of view (flagship)",
         hook="Nothing looks wrong. That's the whole problem — the HMI has "
-        "read a calm, steady 50% for the last several minutes.",
+        "shown the same calm, plausible reading for the last several minutes.",
         impact="Tank overflows for real while every screen stays calm.",
         caught_by="MODBUS_VIEW_MANIPULATION (critical) — hardwired float "
         "vs. spoofed transmitter, source-independent",
@@ -159,8 +159,8 @@ SCENARIOS = [
         title="Logic modification, safety disabled",
         hook="A few seconds of dropped connections at 02:14, then "
         "everything read normal again. Three hours later the tank "
-        "overflowed anyway — the interlock that should've stopped it "
-        "was just gone.",
+        "overflowed anyway — the running controller no longer behaved "
+        "like the approved program.",
         impact="Interlock deleted from the PLC program itself; latent "
         "until the tank reaches high-high with the pump still running.",
         caught_by="Not detected — the compromise is over HTTP (OpenPLC's "

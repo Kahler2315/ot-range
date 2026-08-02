@@ -21,6 +21,7 @@ import threading
 import time
 import uuid
 import webbrowser
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import timedelta
 from functools import wraps
@@ -46,7 +47,7 @@ from panel.auth import (
     PasswordValidationError,
 )
 from panel.storage import Storage, StorageConflict, utc_now
-from panel.topology import get_topology
+from panel.topology import get_scenario_overlay, get_topology
 from panel.training_service import (
     SOLUTION_DOCS,
     TrainingError,
@@ -105,6 +106,8 @@ class Job:
     lines: list[str] = field(default_factory=list)
     done: bool = False
     returncode: int | None = None
+    completion_callback: Callable[[str, int], None] | None = None
+    line_filter: Callable[[str], str | None] | None = None
     lock: threading.Lock = field(default_factory=threading.Lock)
 
 
@@ -114,37 +117,95 @@ _current_job_id: str | None = None
 
 
 def _run_job(job: Job) -> None:
-    proc = subprocess.Popen(  # nosec B603
-        job.command,
-        cwd=REPO_ROOT,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        bufsize=1,
-    )
-    if proc.stdout is None:
-        raise RuntimeError("subprocess.Popen was not given stdout=PIPE")
-    for raw_line in proc.stdout:
+    try:
+        proc = subprocess.Popen(  # nosec B603
+            job.command,
+            cwd=REPO_ROOT,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+        )
+        if proc.stdout is None:
+            raise RuntimeError("subprocess.Popen was not given stdout=PIPE")
+        for raw_line in proc.stdout:
+            output_line = raw_line.rstrip("\n")
+            if job.line_filter:
+                output_line = job.line_filter(output_line)
+            if output_line is None:
+                continue
+            with job.lock:
+                job.lines.append(output_line)
+        proc.wait()
+        returncode = int(proc.returncode)
+    except OSError as exc:
         with job.lock:
-            job.lines.append(raw_line.rstrip("\n"))
-    proc.wait()
+            job.lines.append(f"Unable to start approved command: {exc.strerror or 'unavailable'}")
+        returncode = 127
     with job.lock:
         job.done = True
-        job.returncode = proc.returncode
+        job.returncode = returncode
+        callback = job.completion_callback
+    if callback:
+        try:
+            callback(job.id, returncode)
+        except Exception:  # pragma: no cover - completion persistence must not kill worker
+            LOG.exception("Unable to persist completion for job %s", job.id)
 
 
-def start_job(command: list[str]) -> str | None:
+def start_job(
+    command: list[str],
+    *,
+    line_filter: Callable[[str], str | None] | None = None,
+    initial_lines: list[str] | None = None,
+) -> str | None:
     """Returns a job id, or None if another job is already running."""
     global _current_job_id
     with _jobs_guard:
         if _current_job_id is not None and not _jobs[_current_job_id].done:
             return None
         job_id = uuid.uuid4().hex[:10]
-        job = Job(id=job_id, command=command)
+        job = Job(
+            id=job_id,
+            command=command,
+            lines=list(initial_lines or []),
+            line_filter=line_filter,
+        )
         _jobs[job_id] = job
         _current_job_id = job_id
     threading.Thread(target=_run_job, args=(job,), daemon=True).start()
     return job_id
+
+
+def register_job_completion(job_id: str, callback: Callable[[str, int], None]) -> None:
+    """Attach persistence after job allocation; immediately catch already-finished fast jobs."""
+    job = _jobs[job_id]
+    with job.lock:
+        job.completion_callback = callback
+        finished = job.done
+        returncode = job.returncode
+    if finished and returncode is not None:
+        callback(job_id, returncode)
+
+
+def student_scenario_output_filter() -> Callable[[str], str | None]:
+    """Hide attacker narration that directly states flags; retain sensor evidence/errors."""
+    sensor_output = False
+
+    def filter_line(line: str) -> str | None:
+        nonlocal sensor_output
+        if "WHAT THE SENSOR CAUGHT" in line:
+            sensor_output = True
+            return line
+        if sensor_output:
+            if "walkthrough" in line.lower() or "answer-key" in line.lower():
+                return "[i] Investigation documents are available through the scenario workspace."
+            return line
+        if line.startswith("[!]") or "timed out" in line.lower():
+            return line
+        return None
+
+    return filter_line
 
 
 # --- status ---
@@ -155,7 +216,10 @@ def collect_status() -> dict:
     any_present = False
     all_healthy = True
     for name in DOCKER_CONTAINERS:
-        raw = docker_container_status(name)
+        try:
+            raw = docker_container_status(name)
+        except (FileNotFoundError, OSError):
+            raw = None
         if raw is None:
             containers.append({"name": name, "state": "absent", "health": "", "ok": False})
             all_healthy = False
@@ -338,14 +402,12 @@ def _profile_fields(data: dict) -> dict[str, str | None]:
     return result
 
 
-def scenario_payload() -> list[dict]:
+def student_scenario_payload() -> list[dict]:
     return [
         {
             "id": scenario.id,
             "title": scenario.title,
             "hook": scenario.hook,
-            "impact": scenario.impact,
-            "caught_by": scenario.caught_by,
             "severity": scenario.severity,
             "objectives": [LEARNING_OBJECTIVES[oid] for oid in scenario.objectives],
             "modes": [
@@ -364,10 +426,20 @@ def scenario_payload() -> list[dict]:
             "evidence_sources": scenario.evidence_sources,
             "recommended_training_mode": scenario.recommended_training_mode,
             "process_impact_rating": scenario.process_impact_rating,
-            "detection_coverage_state": scenario.detection_coverage_state,
         }
         for scenario in SCENARIOS
     ]
+
+
+def instructor_scenario_payload() -> list[dict]:
+    payload = student_scenario_payload()
+    for item, scenario in zip(payload, SCENARIOS, strict=True):
+        item.update(
+            impact=scenario.impact,
+            caught_by=scenario.caught_by,
+            detection_coverage_state=scenario.detection_coverage_state,
+        )
+    return payload
 
 
 @app.errorhandler(TrainingError)
@@ -393,8 +465,8 @@ def student_lab():
         return redirect(url_for("index"))
     return render_template(
         "index.html",
-        scenarios=scenario_payload(),
-        solution_docs=sorted(SOLUTION_DOCS),
+        scenarios=student_scenario_payload(),
+        solution_docs=sorted(SOLUTION_DOCS | {"detection", "expected-impact", "walkthrough"}),
         profile=profile,
     )
 
@@ -409,7 +481,7 @@ def instructor_login_page():
 @app.route("/instructor")
 @require_instructor
 def instructor_console():
-    return render_template("instructor.html", scenarios=scenario_payload())
+    return render_template("instructor.html", scenarios=instructor_scenario_payload())
 
 
 @app.route("/api/instructor/status")
@@ -540,7 +612,7 @@ def api_profile(profile_id: str):
 @app.route("/api/profiles/<profile_id>/export")
 def api_profile_export(profile_id: str):
     require_active_profile(profile_id)
-    return jsonify(get_training_service().profile_report(profile_id))
+    return jsonify(get_training_service().profile_report(profile_id, actor_type="student"))
 
 
 @app.route("/api/profiles/<profile_id>/progress/<scenario_id>/reset", methods=["POST"])
@@ -590,6 +662,18 @@ def api_policies():
     return jsonify(get_training_service().public_policies())
 
 
+@app.route("/api/scenarios")
+def api_scenarios():
+    active_profile_id()
+    return jsonify(scenarios=student_scenario_payload())
+
+
+@app.route("/api/instructor/scenarios")
+@require_instructor
+def api_instructor_scenarios():
+    return jsonify(scenarios=instructor_scenario_payload())
+
+
 @app.route("/api/status")
 def api_status():
     return jsonify(collect_status())
@@ -624,11 +708,21 @@ def api_run():
     service = get_training_service()
     service.require_scenario(scenario.id)
     training_mode = service.validate_mode(data.get("training_mode"))
-    job_id = start_job(mode.command)
+    job_id = start_job(
+        mode.command,
+        line_filter=student_scenario_output_filter(),
+        initial_lines=[
+            "[*] Scenario launched. Use the HMI, capture log, point map, and detection output "
+            "to investigate; attacker narration is hidden because it would state assessed answers."
+        ],
+    )
     if job_id is None:
         return jsonify(error="busy"), 409
-    service.configure_attempt(profile_id, scenario.id, mode=training_mode, start=True)
-    return jsonify(job_id=job_id)
+    state = service.configure_attempt(profile_id, scenario.id, mode=training_mode, start=True)
+    storage = get_storage()
+    storage.record_execution_started(profile_id, scenario.id, job_id, mode.label)
+    register_job_completion(job_id, storage.record_execution_finished)
+    return jsonify(job_id=job_id, attempt_id=state["attemptId"])
 
 
 @app.route("/api/stream/<job_id>")
@@ -668,6 +762,17 @@ def api_docs(scenario_id: str, doc: str):
     return Response(path.read_text(), mimetype="text/plain")
 
 
+@app.route("/api/docs/<scenario_id>/<doc>/reveal", methods=["POST"])
+def api_docs_reveal(scenario_id: str, doc: str):
+    scenario = SCENARIOS_BY_ID.get(scenario_id)
+    filename = DOC_FILES.get(doc)
+    if scenario is None or filename is None or not (scenario.dirname / filename).is_file():
+        abort(404)
+    profile_id = active_profile_id()
+    state = get_training_service().reveal_solution_document(profile_id, scenario_id, doc)
+    return jsonify(state=state, documentUrl=url_for("api_docs", scenario_id=scenario_id, doc=doc))
+
+
 @app.route("/api/instructor/docs/<scenario_id>/<doc>")
 @require_instructor
 def api_instructor_docs(scenario_id: str, doc: str):
@@ -703,6 +808,25 @@ def api_topology():
     return jsonify(get_topology())
 
 
+@app.route("/api/topology/overlays/<scenario_id>")
+def api_topology_overlay(scenario_id: str):
+    overlay = get_scenario_overlay(scenario_id)
+    if overlay is None:
+        abort(404)
+    profile_id = active_profile_id()
+    get_training_service().authorize_overlay(profile_id, scenario_id)
+    return jsonify(scenario=scenario_id, overlay=overlay)
+
+
+@app.route("/api/instructor/topology/overlays/<scenario_id>")
+@require_instructor
+def api_instructor_topology_overlay(scenario_id: str):
+    overlay = get_scenario_overlay(scenario_id)
+    if overlay is None:
+        abort(404)
+    return jsonify(scenario=scenario_id, overlay=overlay)
+
+
 @app.route("/api/flags/check", methods=["POST"])
 def api_flags_check():
     data = request_json_object()
@@ -725,7 +849,31 @@ def api_flags_check():
 @app.route("/api/instructor/overview")
 @require_instructor
 def api_instructor_overview():
-    return jsonify(analytics=get_storage().analytics(), status=collect_status())
+    storage = get_storage()
+    return jsonify(
+        analytics=storage.analytics(),
+        integrityEvents=storage.list_training_events(integrity_only=True, limit=100),
+        status=collect_status(),
+    )
+
+
+@app.route("/api/instructor/integrity-events")
+@require_instructor
+def api_instructor_integrity_events():
+    unread = request.args.get("unread") == "1"
+    return jsonify(
+        events=get_storage().list_training_events(
+            integrity_only=True, unread_only=unread, limit=500
+        )
+    )
+
+
+@app.route("/api/instructor/integrity-events/<int:event_id>/acknowledge", methods=["POST"])
+@require_instructor
+def api_instructor_integrity_event_acknowledge(event_id: int):
+    if not get_storage().acknowledge_training_event(event_id):
+        raise TrainingNotFound("unknown integrity event")
+    return jsonify(acknowledged=True)
 
 
 @app.route("/api/instructor/profiles")
@@ -737,14 +885,17 @@ def api_instructor_profiles():
 @app.route("/api/instructor/profiles/<profile_id>/export")
 @require_instructor
 def api_instructor_profile_export(profile_id: str):
-    return jsonify(get_training_service().profile_report(profile_id))
+    return jsonify(get_training_service().profile_report(profile_id, actor_type="instructor"))
 
 
 @app.route("/api/instructor/profiles/export-all")
 @require_instructor
 def api_instructor_export_all():
     service = get_training_service()
-    reports = [service.profile_report(profile["id"]) for profile in get_storage().list_profiles()]
+    reports = [
+        service.profile_report(profile["id"], actor_type="instructor")
+        for profile in get_storage().list_profiles()
+    ]
     return jsonify(
         generatedAt=utc_now(),
         localData=True,
@@ -776,7 +927,7 @@ def api_instructor_profile_reset(profile_id: str):
         return jsonify(error="Incorrect credentials."), 401
     if get_storage().get_profile(profile_id) is None:
         raise TrainingNotFound("unknown profile")
-    get_training_service().reset_all(profile_id)
+    get_training_service().reset_all(profile_id, actor_type="instructor")
     get_storage().record_security_event(
         "profile_progress_reset_by_instructor", {"profile_id": profile_id}
     )

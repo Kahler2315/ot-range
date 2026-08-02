@@ -20,6 +20,7 @@
       </div>
       <ul class="sidebar-nav">
         <li><a href="#instructor-overview" class="nav-link active">Overview</a></li>
+        <li><a href="#integrity-activity" class="nav-link">Integrity Activity</a></li>
         <li><a href="#learner-profiles" class="nav-link">Learner Profiles</a></li>
         <li><a href="#scenario-configuration" class="nav-link">Scenario Configuration</a></li>
         <li><a href="#training-policies" class="nav-link">Training Policies</a></li>
@@ -49,6 +50,12 @@
             <article class="admin-card"><h3>Most used hints</h3><div id="most-used-hints" class="ranked-list"></div></article>
             <article class="admin-card"><h3>Frequently missed flags</h3><div id="missed-flags" class="ranked-list"></div></article>
           </div>
+        </section>
+
+        <section id="integrity-activity" class="workspace-section">
+          <h2>Integrity Activity <span class="lifecycle-badge" id="integrity-unread-count">0 unread</span></h2>
+          <p class="meta-line">Factual local assistance and reset history. These events support instructor review and do not imply misconduct.</p>
+          <div class="admin-card ranked-list" id="integrity-event-list"><p class="status-empty">Loading…</p></div>
         </section>
 
         <section id="learner-profiles" class="workspace-section">
@@ -131,6 +138,14 @@
       <p class="form-status" id="reauth-status" role="status"></p>
       <div class="dialog-actions"><button class="btn-ghost" type="button" id="reauth-cancel">Cancel</button><button class="btn-danger" type="submit" id="reauth-confirm">Confirm</button></div>
     </form>
+  </div>
+
+  <div class="dialog-overlay" id="history-overlay" hidden>
+    <div class="dialog-box" role="dialog" aria-modal="true" aria-labelledby="history-title">
+      <div class="dialog-title" id="history-title">Learner attempt history</div>
+      <div id="history-body"></div>
+      <div class="dialog-actions"><button class="btn-primary" type="button" id="history-close">Close</button></div>
+    </div>
   </div>
 
   <script type="module" src="{{ url_for('static', filename='instructor.js') }}"></script>

@@ -204,9 +204,13 @@ SCENARIO_OVERLAYS = {
 
 
 def get_topology() -> dict:
+    """Return neutral infrastructure only; scenario overlays are gated separately."""
     return {
         "zones": ZONES,
         "nodes": NODES,
         "edges": EDGES,
-        "overlays": SCENARIO_OVERLAYS,
     }
+
+
+def get_scenario_overlay(scenario_id: str) -> dict | None:
+    return SCENARIO_OVERLAYS.get(scenario_id)

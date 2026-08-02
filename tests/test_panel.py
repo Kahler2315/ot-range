@@ -125,8 +125,9 @@ def test_api_topology_shape(client):
     resp = client.get("/api/topology")
     assert resp.status_code == 200
     data = resp.get_json()
-    assert set(data) == {"zones", "nodes", "edges", "overlays"}
+    assert set(data) == {"zones", "nodes", "edges"}
     assert len(data["nodes"]) > 0
+    assert "overlays" not in data
 
 
 def test_api_docs_unchanged_behavior(client):
@@ -218,7 +219,7 @@ def test_map_overlay_warning_is_dismissible(client):
 
 def test_answer_key_warning_uses_explicit_lock_and_back_actions():
     source = (panel_app.REPO_ROOT / "panel/static/training.js").read_text()
-    assert "Opening the answer key will lock this attempt" in source
+    assert "Opening solution material will lock this attempt" in source
     assert 'confirmLabel: "Continue and lock attempt"' in source
     assert 'cancelLabel: "Go back"' in source
 

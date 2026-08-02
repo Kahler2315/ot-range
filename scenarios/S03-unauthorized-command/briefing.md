@@ -8,12 +8,12 @@
 06:42. The Cedar Hollow operator calls: the storage tank is overflowing
 onto the yard, the high-level alarm is sounding, and the fill pump has
 just faulted out. He says he did not start the pump. He also says the HMI
-showed the plant in **manual** mode, which nobody put it in.
+showed an unexpected operating-mode change, which nobody authorised.
 
 The plant is in a bad state right now:
 
 - Tank at 100%, water spilling
-- Fill pump tripped on overload and unavailable
+- Fill pump faulted and unavailable
 - High-high float switch made
 - Alarm annunciating
 

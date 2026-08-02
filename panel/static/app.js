@@ -76,6 +76,7 @@ let currentDrawerScenario = null;
 let consoleStartTime = null;
 let consoleTimerHandle = null;
 let _prereqUpdate = null;
+let _overlayRequestId = 0;
 
 // ==================== status / readiness / services ====================
 
@@ -326,9 +327,19 @@ async function openDocModal(scenarioId, docKey) {
 async function tryOpenDoc(scenarioId, docKey) {
   if (isSolutionDoc(docKey)) {
     const state = TrainingStore.getScenario(scenarioId);
-    if (!state.solutionLocked && state.mode !== "guided") {
+    const finished = ["completed", "completed_with_assistance", "solution_revealed"].includes(state.status);
+    if (!finished && state.mode !== "guided") {
       const ok = await confirmRevealSolution();
       if (!ok) return;
+      try {
+        const revealed = await apiRequest(`/api/docs/${scenarioId}/${docKey}/reveal`, {
+          method: "POST",
+        });
+        TrainingStore.replaceScenario(scenarioId, revealed.state);
+      } catch (error) {
+        await showAlert("Solution unavailable", error.message);
+        return;
+      }
     }
   }
   const opened = await openDocModal(scenarioId, docKey);
@@ -366,6 +377,12 @@ function updateDrawerLifecycleBadge(scenarioId) {
   const state = TrainingStore.getScenario(scenarioId);
   badge.textContent = lifecycleLabel(state);
   badge.className = `lifecycle-badge status-${state.status}`;
+  const attempt = document.getElementById("drawer-attempt-number");
+  if (attempt) {
+    attempt.textContent = state.attemptNumber
+      ? `Attempt ${state.attemptNumber}${state.priorSolutionExposure ? " · practice after solution review" : ""}`
+      : "No attempt created";
+  }
 }
 
 function openDrawer(scenarioId) {
@@ -381,12 +398,11 @@ function openDrawer(scenarioId) {
     <div class="drawer-subtitle">${scenarioId}</div>
     <h2 class="drawer-title">${meta.title}</h2>
     <span class="lifecycle-badge" id="drawer-lifecycle-badge"></span>
+    <span class="meta-line" id="drawer-attempt-number"></span>
     <p class="meta-line" style="margin-top:8px">${meta.hook}</p>
 
     <div class="drawer-section">
-      <h4>Threat summary</h4>
-      <p class="meta-line"><b>Impact:</b> ${meta.impact}</p>
-      <p class="meta-line"><b>Caught by:</b> ${meta.caught_by}</p>
+      <h4>Investigation preparation</h4>
       <dl class="drawer-metadata scenario-metadata">
         <div><dt>Difficulty</dt><dd>${meta.difficulty}</dd></div>
         <div><dt>Estimated time</dt><dd>${meta.estimated_duration}</dd></div>
@@ -395,7 +411,6 @@ function openDrawer(scenarioId) {
         <div><dt>Evidence sources</dt><dd>${meta.evidence_sources.join("; ")}</dd></div>
         <div><dt>Recommended mode</dt><dd>${meta.recommended_training_mode}</dd></div>
         <div><dt>Process impact</dt><dd>${meta.process_impact_rating}</dd></div>
-        <div><dt>Detection coverage</dt><dd>${meta.detection_coverage_state}</dd></div>
       </dl>
       ${meta.severity === "critical" ? '<div class="warning-banner">This scenario causes real simulated process damage (tank overflow, pump damage) when run. Simulated environment only — see SECURITY.md.</div>' : ""}
     </div>
@@ -424,8 +439,8 @@ function openDrawer(scenarioId) {
       <h4>Documentation</h4>
       <div class="doc-tabs">
         <button class="doc-tab" data-doc="briefing">Briefing</button>
-        <button class="doc-tab" data-doc="detection" ${TrainingStore.settings.walkthroughEnabled ? "" : "disabled"}>Detection</button>
-        <button class="doc-tab" data-doc="expected-impact" ${TrainingStore.settings.walkthroughEnabled ? "" : "disabled"}>Expected impact</button>
+        <button class="doc-tab solution-doc" data-doc="detection" ${TrainingStore.settings.walkthroughEnabled ? "" : "disabled"}>Detection 🔒</button>
+        <button class="doc-tab solution-doc" data-doc="expected-impact" ${TrainingStore.settings.walkthroughEnabled ? "" : "disabled"}>Expected impact 🔒</button>
         <button class="doc-tab solution-doc" data-doc="answer-key" ${TrainingStore.settings.answerKeyEnabled ? "" : "disabled"}>Answer key 🔒</button>
       </div>
       ${!TrainingStore.settings.walkthroughEnabled || !TrainingStore.settings.answerKeyEnabled ? '<p class="flag-evidence">Some solution resources are unavailable under current instructor policies.</p>' : ""}
@@ -616,7 +631,16 @@ async function exportOneScenarioReport(scenarioId) {
   const report = await TrainingStore.exportAll();
   const scenario = report.scenarios.find((item) => item.scenario === scenarioId);
   exportJSON(
-    { profile: report.profile, disclaimer: report.disclaimer, scenario },
+    {
+      reportSchemaVersion: report.reportSchemaVersion,
+      applicationVersion: report.applicationVersion,
+      sourceRevision: report.sourceRevision,
+      databaseId: report.databaseId,
+      profile: report.profile,
+      integritySummary: report.integritySummary,
+      disclaimer: report.disclaimer,
+      scenario,
+    },
     `ot-range-${scenarioId}-report.json`
   );
 }
@@ -636,6 +660,7 @@ function wireProgressExports() {
 async function loadTopology() {
   const resp = await fetch("/api/topology");
   TOPOLOGY = await resp.json();
+  TOPOLOGY.overlays = {};
   initNetworkMap(TOPOLOGY);
 }
 
@@ -655,7 +680,8 @@ function isOverlayUnlocked(scenarioId) {
   return ["completed", "completed_with_assistance", "solution_revealed"].includes(state.status);
 }
 
-function tryShowMapOverlay(scenarioId) {
+async function tryShowMapOverlay(scenarioId) {
+  const requestId = ++_overlayRequestId;
   const select = document.getElementById("map-scenario-select");
   const note = document.getElementById("map-overlay-locked-note");
   const message = document.getElementById("map-overlay-locked-message");
@@ -667,10 +693,21 @@ function tryShowMapOverlay(scenarioId) {
     return;
   }
   if (isOverlayUnlocked(scenarioId)) {
-    select.value = scenarioId;
-    note.hidden = true;
-    message.textContent = "";
-    setMapOverlay(scenarioId);
+    try {
+      const data = await apiRequest(`/api/topology/overlays/${scenarioId}`);
+      if (requestId !== _overlayRequestId || select.value !== scenarioId) return;
+      TOPOLOGY.overlays[scenarioId] = data.overlay;
+      select.value = scenarioId;
+      note.hidden = true;
+      message.textContent = "";
+      setMapOverlay(scenarioId);
+    } catch (error) {
+      if (requestId !== _overlayRequestId) return;
+      select.value = scenarioId;
+      note.hidden = false;
+      message.textContent = error.message;
+      setMapOverlay(null);
+    }
   } else {
     // Keep the locked scenario selected. Resetting the select to None
     // here left the warning visible while None was already selected,

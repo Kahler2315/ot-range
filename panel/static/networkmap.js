@@ -126,7 +126,7 @@ function render() {
   svg.classList.toggle("map-has-overlay", Boolean(_currentOverlayId));
   applyViewBox();
 
-  const overlay = _currentOverlayId ? _topology.overlays[_currentOverlayId] : null;
+  const overlay = _currentOverlayId ? (_topology.overlays || {})[_currentOverlayId] : null;
   renderDefinitions(svg);
   renderZones(svg);
   renderEdges(svg, overlay);

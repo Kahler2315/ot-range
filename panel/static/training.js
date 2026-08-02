@@ -7,6 +7,8 @@ import { apiRequest } from "./api.js";
 
 function emptyScenarioState() {
   return {
+    attemptId: null,
+    attemptNumber: 0,
     status: "not_started",
     mode: null,
     scored: true,
@@ -17,9 +19,12 @@ function emptyScenarioState() {
     flagsSolved: [],
     pointsEarned: {},
     documentsOpened: [],
+    documentHistory: [],
     walkthroughOpened: false,
     answerKeyOpened: false,
     solutionLocked: false,
+    priorSolutionExposure: false,
+    executions: [],
     notes: "",
   };
 }
@@ -124,6 +129,7 @@ export function recomputeStatus(scenarioId, flags) {
 }
 
 export function lifecycleLabel(state) {
+  const successfulRuns = (state.executions || []).filter((execution) => execution.return_code === 0).length;
   const labels = {
     not_started: "Not started",
     in_progress: "In progress",
@@ -131,6 +137,9 @@ export function lifecycleLabel(state) {
     completed_with_assistance: "Completed with assistance",
     solution_revealed: "Completed with solution",
   };
+  if (["completed", "completed_with_assistance"].includes(state.status) && successfulRuns === 0) {
+    return state.mode === "guided" ? "Guided checks complete — run not verified" : "Flags complete — run not verified";
+  }
   return labels[state.status] || state.status;
 }
 
@@ -201,9 +210,9 @@ export async function confirmRevealHint(scenarioId, flag, level) {
 
 export function confirmRevealSolution() {
   return showConfirmDialog({
-    title: "Opening the answer key will lock this attempt",
+    title: "Opening solution material will lock this attempt",
     message:
-      "If you continue, your current score will be preserved, but you will be locked out of all further flag submissions for this attempt. You must reset the scenario attempt to earn more points. Go back if you opened this by accident.",
+      "If you continue, your current score will be preserved, but you will be locked out of all further flag submissions for this attempt. Any later reset and repeat will remain in the local attempt history as practice after solution review. Go back if you opened this by accident.",
     confirmLabel: "Continue and lock attempt",
     cancelLabel: "Go back",
     danger: true,
@@ -214,7 +223,7 @@ export function confirmResetAttempt() {
   return showConfirmDialog({
     title: "Reset this attempt?",
     message:
-      "This clears this scenario's local progress, hints used, attempt history, notes, and score. It does not change any source files or accepted answers. This cannot be undone.",
+      "This starts a new attempt with clean working progress. The prior attempt, score, hints, solution access, notes, and reset event remain in local history for accurate reports. It does not change source files or accepted answers.",
     confirmLabel: "Reset attempt",
     cancelLabel: "Cancel",
     danger: true,
@@ -519,6 +528,7 @@ function reportRowsHtml(r) {
   return `
     <h2>${escapeHtml(r.scenarioTitle)} (${r.scenario})</h2>
     <table>
+      <tr><th>Current attempt</th><td>${r.attemptNumber || "—"} of ${r.totalAttempts || r.attemptNumber || "—"}</td></tr>
       <tr><th>Status</th><td>${escapeHtml(status)}</td></tr>
       <tr><th>Mode</th><td>${escapeHtml(r.trainingMode || "—")}</td></tr>
       <tr><th>Score</th><td>${score === null ? "Not scored" : `${score} / ${maximum}`}</td></tr>
@@ -530,9 +540,14 @@ function reportRowsHtml(r) {
       <tr><th>Learning objectives</th><td>${r.learningObjectives.map(escapeHtml).join("; ")}</td></tr>
       <tr><th>Documentation opened</th><td>${(r.documentationOpened || []).map(escapeHtml).join(", ") || "—"}</td></tr>
       <tr><th>Answer key opened</th><td>${r.answerKeyOpened || r.solutionRevealed ? "Yes" : "No"}</td></tr>
-      <tr><th>Detection outcome</th><td>${escapeHtml(r.detectionOutcome)}</td></tr>
+      <tr><th>Prior solution exposure</th><td>${r.priorSolutionExposure ? "Yes — practice after solution review" : "No"}</td></tr>
+      ${r.detectionOutcome ? `<tr><th>Detection outcome</th><td>${escapeHtml(r.detectionOutcome)}</td></tr>` : ""}
       <tr><th>Notes</th><td>${escapeHtml(r.notes || "—")}</td></tr>
-    </table>`;
+    </table>
+    ${(r.attemptHistory || []).length ? `<h3>Attempt history</h3><table>
+      <tr><th>Attempt</th><th>Status / mode</th><th>Score</th><th>Assistance and reset</th></tr>
+      ${r.attemptHistory.map((attempt) => `<tr><td>${attempt.attemptNumber}</td><td>${escapeHtml(attempt.status)} / ${escapeHtml(attempt.mode || "—")}</td><td>${attempt.score === null ? "Not scored" : `${attempt.score} / ${attempt.maximumScore}`}</td><td>${attempt.solutionRevealed ? "Solution viewed. " : ""}${attempt.hintsUsed ? `${attempt.hintsUsed} hint(s). ` : ""}${attempt.resetAt ? `Reset by ${escapeHtml(attempt.resetActor)} at ${escapeHtml(attempt.resetAt)}.` : attempt.current ? "Current." : "Closed."}</td></tr>`).join("")}
+    </table>` : ""}`;
 }
 
 export function openPrintableReport(reportOrReports, title) {
@@ -549,6 +564,7 @@ export function openPrintableReport(reportOrReports, title) {
       ? reportOrReports
       : [reportOrReports];
   const profile = reportBundle?.profile;
+  const integrity = reportBundle?.integritySummary;
   const profileHtml = profile
     ? `<table>
       <tr><th>Learner</th><td>${escapeHtml(profile.displayName)}</td></tr>
@@ -558,6 +574,14 @@ export function openPrintableReport(reportOrReports, title) {
       <tr><th>Section</th><td>${escapeHtml(profile.section || "—")}</td></tr>
       <tr><th>Instructor</th><td>${escapeHtml(profile.instructorName || "—")}</td></tr>
       <tr><th>Local profile ID</th><td>${escapeHtml(profile.localProfileId)}</td></tr>
+    </table>`
+    : "";
+  const integrityHtml = integrity
+    ? `<h2>Integrity summary</h2><table>
+      <tr><th>Total attempts</th><td>${integrity.totalAttempts}</td></tr>
+      <tr><th>Total resets</th><td>${integrity.totalResets}</td></tr>
+      <tr><th>Answer keys viewed</th><td>${integrity.priorSolutionReveals}</td></tr>
+      <tr><th>Other solution documents viewed</th><td>${integrity.priorSolutionDocumentViews}</td></tr>
     </table>`
     : "";
   win.document.write(`<!doctype html><html><head><meta charset="utf-8"><meta name="color-scheme" content="light only"><title>${escapeHtml(title)}</title>
@@ -571,6 +595,7 @@ export function openPrintableReport(reportOrReports, title) {
     </style></head><body>
     <h1>${escapeHtml(title)}</h1>
     ${profileHtml}
+    ${integrityHtml}
     ${rows.map(reportRowsHtml).join("")}
     <p class="disclaimer">Local training progress only — stored on this installation, not tamper-resistant, not suitable as formal certification evidence.</p>
     </body></html>`);
@@ -603,7 +628,7 @@ export function renderProgressSection(scenariosMeta, allFlags, onExportOne) {
 
     const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td>${meta.id} — ${escapeHtml(meta.title)}</td>
+      <td>${meta.id} — ${escapeHtml(meta.title)}${state.attemptNumber ? `<small>Attempt ${state.attemptNumber}${state.priorSolutionExposure ? " · practice after solution review" : ""}</small>` : ""}</td>
       <td>${escapeHtml(lifecycleLabel(state))}</td>
       <td>${escapeHtml(state.mode || "—")}</td>
       <td>${report.flagsSolved}/${report.totalFlags}</td>

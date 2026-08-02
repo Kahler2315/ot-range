@@ -159,14 +159,11 @@
               </div>
               <h3>{{ s.title }}</h3>
               <p class="hook">{{ s.hook }}</p>
-              <p class="meta-line"><b>Impact:</b> {{ s.impact }}</p>
-              <p class="meta-line"><b>Caught by:</b> {{ s.caught_by }}</p>
               <dl class="scenario-metadata">
                 <div><dt>Difficulty</dt><dd>{{ s.difficulty }}</dd></div>
                 <div><dt>Estimated time</dt><dd>{{ s.estimated_duration }}</dd></div>
                 <div><dt>Primary skill</dt><dd>{{ s.primary_skills[0] }}</dd></div>
                 <div><dt>Process impact</dt><dd>{{ s.process_impact_rating }}</dd></div>
-                <div><dt>Detection coverage</dt><dd>{{ s.detection_coverage_state }}</dd></div>
               </dl>
               <div class="scenario-card-footer">
                 <span class="lifecycle-badge" data-lifecycle="{{ s.id }}">Not started</span>

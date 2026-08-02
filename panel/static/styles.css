@@ -405,6 +405,8 @@ textarea.notes-field {
 .dialog-title { font-weight: 700; font-size: var(--fs-lg); margin-bottom: var(--sp-2); }
 .dialog-message { color: var(--text-dim); font-size: var(--fs-sm); line-height: 1.55; margin: 0 0 var(--sp-4); }
 .dialog-actions { display: flex; justify-content: flex-end; gap: var(--sp-2); }
+#history-overlay .dialog-box { max-height: 86vh; overflow-y: auto; width: min(820px, 94vw); }
+.history-scenario { border-top: 1px solid var(--border); margin-top: var(--sp-4); padding-top: var(--sp-3); }
 
 /* ---------- console drawer ---------- */
 
@@ -711,6 +713,9 @@ textarea.notes-field {
 .ranked-list > div { border-bottom: 1px solid var(--border); display: flex; font-size: var(--fs-sm); justify-content: space-between; padding: var(--sp-2) 0; }
 .ranked-list > div:last-child { border-bottom: 0; }
 .ranked-list b { color: var(--accent-strong); font-family: var(--mono); font-size: var(--fs-xs); }
+.integrity-event { align-items: center; gap: var(--sp-3); }
+.integrity-event small { color: var(--text-faint); display: block; margin-top: 3px; }
+.integrity-event-prominent { background: rgba(239, 91, 91, 0.08); border-left: 3px solid var(--danger); padding-left: var(--sp-3) !important; }
 .admin-table-wrap { border: 1px solid var(--border); border-radius: var(--radius-md); margin-top: var(--sp-4); overflow-x: auto; }
 .table-actions { display: flex; flex-wrap: wrap; gap: var(--sp-1); min-width: 260px; }
 .table-actions button { min-height: 32px; padding: 6px 10px; }

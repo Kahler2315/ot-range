@@ -172,7 +172,80 @@ def test_attempt_and_profile_progress_reset(storage):
     storage.ensure_attempt("p1", "S03", mode="guided", scored=True, start=True)
 
     assert storage.reset_attempt("p1", "S01") is True
-    assert storage.get_attempt("p1", "S01") is None
+    current = storage.get_attempt("p1", "S01")
+    assert current["attempt_number"] == 2
+    assert current["status"] == "not_started"
+    history = storage.list_attempt_history("p1", "S01")
+    assert len(history) == 2
+    assert history[0]["reset_actor"] == "student"
     assert storage.get_attempt("p1", "S03") is not None
-    assert storage.reset_profile_progress("p1") == 1
-    assert storage.list_attempts("p1") == []
+    assert storage.reset_profile_progress("p1") == 2
+    assert all(attempt["status"] == "not_started" for attempt in storage.list_attempts("p1"))
+    events = storage.list_training_events(profile_id="p1")
+    assert any(event["event_type"] == "attempt_reset" for event in events)
+    assert any(event["event_type"] == "profile_progress_reset" for event in events)
+
+
+def test_v1_schema_migrates_attempt_children_without_data_loss(tmp_path):
+    path = tmp_path / "legacy.db"
+    with sqlite3.connect(path) as conn:
+        conn.executescript(
+            """
+            CREATE TABLE application_metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+            CREATE TABLE profiles (
+                id TEXT PRIMARY KEY, display_name TEXT NOT NULL, learner_id TEXT,
+                organization TEXT, course TEXT, section TEXT, instructor_name TEXT,
+                created_at TEXT NOT NULL, updated_at TEXT NOT NULL, last_activity_at TEXT NOT NULL
+            );
+            CREATE TABLE scenario_availability (
+                scenario_id TEXT PRIMARY KEY, enabled INTEGER NOT NULL, updated_at TEXT NOT NULL
+            );
+            CREATE TABLE scenario_attempts (
+                profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+                scenario_id TEXT NOT NULL, status TEXT NOT NULL, mode TEXT, scored INTEGER NOT NULL,
+                started_at TEXT, completed_at TEXT, solution_locked INTEGER NOT NULL,
+                notes TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+                PRIMARY KEY (profile_id, scenario_id)
+            );
+            CREATE TABLE flag_progress (
+                profile_id TEXT NOT NULL, scenario_id TEXT NOT NULL, flag_id TEXT NOT NULL,
+                attempt_count INTEGER NOT NULL, solved INTEGER NOT NULL, points_earned INTEGER,
+                solved_at TEXT, PRIMARY KEY (profile_id, scenario_id, flag_id),
+                FOREIGN KEY (profile_id, scenario_id)
+                    REFERENCES scenario_attempts(profile_id, scenario_id) ON DELETE CASCADE
+            );
+            CREATE TABLE hint_reveals (
+                profile_id TEXT NOT NULL, scenario_id TEXT NOT NULL, flag_id TEXT NOT NULL,
+                level INTEGER NOT NULL, point_cost INTEGER NOT NULL, revealed_at TEXT NOT NULL,
+                PRIMARY KEY (profile_id, scenario_id, flag_id, level),
+                FOREIGN KEY (profile_id, scenario_id)
+                    REFERENCES scenario_attempts(profile_id, scenario_id) ON DELETE CASCADE
+            );
+            CREATE TABLE opened_documents (
+                profile_id TEXT NOT NULL, scenario_id TEXT NOT NULL, document_key TEXT NOT NULL,
+                opened_at TEXT NOT NULL, PRIMARY KEY (profile_id, scenario_id, document_key),
+                FOREIGN KEY (profile_id, scenario_id)
+                    REFERENCES scenario_attempts(profile_id, scenario_id) ON DELETE CASCADE
+            );
+            INSERT INTO profiles VALUES ('p1', 'Legacy', NULL, NULL, NULL, NULL, NULL,
+                                         't0', 't0', 't0');
+            INSERT INTO scenario_attempts VALUES (
+                'p1', 'S01', 'in_progress', 'independent', 1, 't0', NULL, 0,
+                'legacy notes', 't0', 't0'
+            );
+            INSERT INTO flag_progress VALUES ('p1', 'S01', 'f1', 2, 1, 6, 't1');
+            INSERT INTO hint_reveals VALUES ('p1', 'S01', 'f2', 1, 1, 't1');
+            INSERT INTO opened_documents VALUES ('p1', 'S01', 'briefing', 't1');
+            PRAGMA user_version = 1;
+            """
+        )
+    migrated = Storage(path)
+    migrated.initialize(["S01"])
+    assert migrated.schema_version() == SCHEMA_VERSION
+    attempt = migrated.get_attempt("p1", "S01")
+    assert attempt["attempt_number"] == 1
+    assert attempt["notes"] == "legacy notes"
+    assert attempt["flags"][0]["points_earned"] == 6
+    assert attempt["hints"][0]["level"] == 1
+    assert attempt["documents"][0]["document_key"] == "briefing"
+    assert migrated.database_id() != "unknown"

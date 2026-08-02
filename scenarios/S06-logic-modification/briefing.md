@@ -11,7 +11,7 @@ seconds of connection resets, then everything came back and read exactly
 as it always does. No fault, no alarm, no operator complaint. She almost
 didn't log it.
 
-Three hours later, the tank overflowed. `ALARM_HORN` sounded right on
+Several hours later, the tank overflowed. `ALARM_HORN` sounded right on
 schedule at the usual high-high threshold. The pump kept running anyway.
 
 You have the sensor capture, and access to `plc/logic/cedar_hollow.st`
@@ -45,15 +45,13 @@ make up                                     # the real OpenPLC stack
 .venv/bin/python -m attacker.s06_logic_modification
 ```
 
-The attack logs into OpenPLC's web interface, uploads
-`plc/logic/cedar_hollow_s06_no_interlock.st`, compiles it, restarts the
-runtime, then raises `SP_LVL_HI` over Modbus to reach the failure
-condition without waiting on the plant's normal fill cycle. If it times
-out without reaching high-high level, re-run with a longer `--timeout`,
-or restart the stack (`make down && make up`) so the tank starts lower.
+The scenario performs the suspected controller change and accelerates
+the plant so the delayed safety consequence can be investigated during
+a lab period. If it times out, re-run with a longer `--timeout`, or
+restart the stack (`make down && make up`) so the tank starts lower.
 
 Diff the two programs yourself:
 
 ```bash
-diff plc/logic/cedar_hollow.st plc/logic/cedar_hollow_s06_no_interlock.st
+find plc/logic -maxdepth 1 -name '*.st' -print
 ```

@@ -75,11 +75,14 @@ visit to Instructor Console. Instructor credentials use salted scrypt hashes,
 and authenticated sessions are opaque, server-side records rather than browser
 storage. Local learner profiles are not verified online accounts.
 
-Each scenario also has 5 short-answer flags (20 total) pulled straight
+Each scenario also has focused short-answer investigation checks pulled straight
 from its own answer key — a concrete "did I actually find the thing"
 check, not just a pass/fail on running the attack script. Answers are
 checked server-side, so they're never sitting in the page source; the
-header tracks your running total. See [`scenarios/flags.py`](scenarios/flags.py).
+header tracks your running total. Operational credentials shown to learners are
+not also scored as discoveries. Scenario resets start a new numbered attempt;
+prior scores, hints, solution access, and reset history remain in local reports.
+See [`scenarios/flags.py`](scenarios/flags.py).
 
 **Windows 10/11 — installer (recommended for schools/companies):**
 prerequisite either way is [Docker Desktop](https://www.docker.com/products/docker-desktop/)

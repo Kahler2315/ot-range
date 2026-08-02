@@ -7,7 +7,7 @@
 
 Nothing looks wrong. That's the whole problem.
 
-The Cedar Hollow HMI has shown a steady, unremarkable 50% tank level for
+The Cedar Hollow HMI has shown a steady, unremarkable tank level for
 the last several minutes. No alarm. No unusual traffic pattern an
 operator would notice by eye. A shift change is coming up and the
 outgoing operator is about to tell the incoming one it was a quiet shift.
@@ -20,16 +20,15 @@ the answer to whether "quiet shift" is true.
 1. The HMI display and the sensor capture describe the same plant at the
    same time. Do they agree? If not, which one is lying, and how do you
    know — not guess, *know* — which one to trust?
-2. `LT_101` (the analog level transmitter) is a Modbus input register —
-   function code 4, read-only over the wire. Explain precisely why that
-   matters for what an attacker *can't* do to it that they could do to a
-   coil in S03.
+2. Determine which Modbus function code reads `LT_101`, then explain
+   what that register type means for what an attacker can and cannot do
+   to it compared with a coil in S03.
 3. If the wire-level protocol can't be written to, where did the false
    reading actually come from? What does that imply about where the
    compromise happened?
-4. `LSHH_101` never wavers from the truth in this capture. Why not — what
-   makes it different from `LT_101` architecturally, not just in this one
-   instance?
+4. Identify the independent discrete level point that does not waver
+   from physical truth. What makes it different from `LT_101`
+   architecturally, not just in this one instance?
 5. Two separate detections exist for this incident, at very different
    points in the timeline. Find both. Which one would you *rather* be the
    one that caught it, and why?

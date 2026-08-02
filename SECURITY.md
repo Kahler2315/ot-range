@@ -57,12 +57,25 @@ the Flask backend. Hiding or disabling a browser control is never the security
 boundary. Accepted flag answers remain only in server-side Python data, and
 unrevealed hint text is returned only by the sequential reveal endpoint.
 
+Scenario resets create a new numbered attempt instead of deleting the previous
+one. Answer-key, solution-document, hint, execution, completion, and reset
+events remain in an append-only learner history and are visible in local
+reports and the Instructor Console. Neutral topology is served separately from
+backend-gated scenario overlays so hidden SVG state is not a solution channel.
+
 This remains a single-machine, loopback application. Student profiles have no
 passwords and anyone with local access to the browser can select them. The
 SQLite file is not encrypted at rest, reports are not tamper-resistant, and
 this is not an LMS or formal certification system. Operating-system account and
 filesystem controls remain responsible for protecting local records and the
 database backup.
+
+The full open-source checkout still contains `scenarios/flags.py`, answer-key
+Markdown, tests, and Git history. A learner who controls the host can read
+those files or alter the database. The event history improves ordinary local
+accountability; it does not make a learner-controlled installation suitable
+for high-assurance graded or certification use. That requires instructor-
+controlled storage and solution material outside the learner's machine.
 
 ## Reporting a vulnerability or a sanitization miss
 

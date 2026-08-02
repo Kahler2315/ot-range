@@ -107,6 +107,6 @@ def test_s06_overlay_flags_the_http_port_not_a_modbus_path():
     assert overlay["detection_nodes"] == []
 
 
-def test_get_topology_returns_all_four_keys():
+def test_get_topology_returns_only_student_safe_base_keys():
     data = get_topology()
-    assert set(data) == {"zones", "nodes", "edges", "overlays"}
+    assert set(data) == {"zones", "nodes", "edges"}

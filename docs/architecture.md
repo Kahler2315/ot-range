@@ -51,6 +51,19 @@ can hand out.
 
 ## Architecture
 
+The local web panel stores instructor authentication, learner profiles,
+numbered scenario attempts, and append-only training events in SQLite. A
+student reset closes the current attempt and creates the next one; it does not
+erase prior assistance or solution-access history. Student-safe scenario
+metadata and neutral topology are separate from instructor outcome metadata
+and backend-gated attack overlays.
+
+This history is accountability for a local practice workflow, not a remote LMS
+or tamper-proof assessment service. A learner with filesystem access to the
+open-source checkout can inspect answers and modify local data. High-assurance
+assessment therefore requires instructor-controlled storage and solution
+content outside the learner-controlled host.
+
 Purdue-style zones as separate Docker networks. Inter-zone traffic is
 forced through a single router container, which is where the network
 sensor sits — mirroring where a real OT tap lives.

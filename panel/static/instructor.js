@@ -15,6 +15,7 @@ function renderAnalytics(analytics) {
     [analytics.guided_attempts, "guided"],
     [analytics.completed_attempts, "completed"],
     [analytics.solution_revealed_attempts, "solution revealed"],
+    [analytics.unread_integrity_events, "unread integrity events"],
     [text(analytics.average_solved_flag_points), "average solved-flag points"],
   ];
   document.getElementById("analytics-grid").innerHTML = metrics
@@ -43,6 +44,31 @@ function renderRangeHealth(status) {
     <p class="meta-line">${healthy} of ${status.docker.containers.length} containers healthy · ${status.busy ? "A range job is running." : "No range job is running."}</p>`;
 }
 
+function renderIntegrityEvents(events) {
+  const target = document.getElementById("integrity-event-list");
+  const unread = events.filter((event) => !event.acknowledged).length;
+  document.getElementById("integrity-unread-count").textContent = `${unread} unread`;
+  if (!events.length) {
+    target.innerHTML = '<p class="status-empty">No integrity-relevant activity recorded yet.</p>';
+    return;
+  }
+  target.innerHTML = events.map((event) => {
+    const details = event.details || {};
+    const resetAfterSolution = event.event_type === "attempt_reset" && details.prior_solution_exposure;
+    const label = event.event_type.replaceAll("_", " ");
+    return `<div class="integrity-event ${resetAfterSolution ? "integrity-event-prominent" : ""}">
+      <span><b>${escapeHtml(event.display_name)}</b> · ${escapeHtml(event.scenario_id || "All scenarios")}<small>${escapeHtml(label)} · ${escapeHtml(event.actor_type)} · ${escapeHtml(event.occurred_at)}</small></span>
+      ${event.acknowledged ? '<b>Reviewed</b>' : `<button class="btn-ghost" data-integrity-ack="${event.id}">Mark reviewed</button>`}
+    </div>`;
+  }).join("");
+  target.querySelectorAll("[data-integrity-ack]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      await apiRequest(`/api/instructor/integrity-events/${button.dataset.integrityAck}/acknowledge`, { method: "POST" });
+      await refresh();
+    });
+  });
+}
+
 function renderProfiles() {
   const tbody = document.getElementById("instructor-profile-rows");
   if (!profiles.length) {
@@ -55,12 +81,14 @@ function renderProfiles() {
       <td>${escapeHtml(text(profile.course))}<small>${escapeHtml(text(profile.section))}</small></td>
       <td>${escapeHtml(text(profile.last_activity_at))}</td>
       <td class="table-actions">
+        <button class="btn-ghost" data-profile-history="${profile.id}">View history</button>
         <button class="btn-ghost" data-profile-export="${profile.id}">Export</button>
         <button class="btn-ghost" data-profile-reset="${profile.id}">Reset progress</button>
         <button class="btn-secondary-danger" data-profile-delete="${profile.id}">Delete</button>
       </td>
     </tr>`).join("");
   tbody.querySelectorAll("[data-profile-export]").forEach((button) => button.addEventListener("click", () => exportProfile(button.dataset.profileExport)));
+  tbody.querySelectorAll("[data-profile-history]").forEach((button) => button.addEventListener("click", () => viewProfileHistory(button.dataset.profileHistory)));
   tbody.querySelectorAll("[data-profile-reset]").forEach((button) => button.addEventListener("click", () => destructiveProfileAction(button.dataset.profileReset, "reset")));
   tbody.querySelectorAll("[data-profile-delete]").forEach((button) => button.addEventListener("click", () => destructiveProfileAction(button.dataset.profileDelete, "delete")));
 }
@@ -83,6 +111,7 @@ async function refresh() {
     profiles = profileData.profiles;
     policies = policyData;
     renderAnalytics(overview.analytics);
+    renderIntegrityEvents(overview.integrityEvents || []);
     renderRangeHealth(overview.status);
     renderProfiles();
     renderPolicies();
@@ -141,6 +170,22 @@ async function destructiveProfileAction(profileId, action) {
 async function exportProfile(profileId) {
   const report = await apiRequest(`/api/instructor/profiles/${profileId}/export`);
   downloadJSON(report, `ot-range-${profileId}-report.json`);
+}
+
+async function viewProfileHistory(profileId) {
+  const report = await apiRequest(`/api/instructor/profiles/${profileId}/export`);
+  document.getElementById("history-title").textContent = `${report.profile.displayName} — attempt history`;
+  const scenarios = report.scenarios.filter((scenario) => scenario.totalAttempts > 0);
+  document.getElementById("history-body").innerHTML = scenarios.length
+    ? scenarios.map((scenario) => `<section class="history-scenario">
+        <h3>${escapeHtml(scenario.scenario)} — ${escapeHtml(scenario.scenarioTitle)}</h3>
+        ${scenario.attemptHistory.map((attempt) => `<div class="profile-list-item">
+          <span><b>Attempt ${attempt.attemptNumber}</b><small>${escapeHtml(attempt.mode || "Mode not selected")} · ${escapeHtml(attempt.status)} · score ${text(attempt.score)}/${text(attempt.maximumScore)}</small><small>${attempt.solutionRevealed ? "Solution viewed · " : ""}${attempt.resetAt ? `Reset by ${escapeHtml(attempt.resetActor)} at ${escapeHtml(attempt.resetAt)}` : attempt.current ? "Current attempt" : "Closed"}</small></span>
+          <b>${attempt.practiceAfterSolutionReview ? "Practice after solution review" : attempt.hintsUsed ? "Hint assisted" : "Independent record"}</b>
+        </div>`).join("")}
+      </section>`).join("")
+    : '<p class="status-empty">No attempts recorded.</p>';
+  document.getElementById("history-overlay").hidden = false;
 }
 
 function wirePolicyForm() {
@@ -210,4 +255,7 @@ document.getElementById("export-all-records").addEventListener("click", async ()
 wirePolicyForm();
 wireSettings();
 wireNavigation();
+document.getElementById("history-close").addEventListener("click", () => {
+  document.getElementById("history-overlay").hidden = true;
+});
 refresh();

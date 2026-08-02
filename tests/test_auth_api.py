@@ -47,6 +47,10 @@ def test_unauthenticated_instructor_page_redirects_and_all_apis_deny(panel_clien
         ("post", "/api/instructor/change-password"),
         ("post", "/api/instructor/sessions/invalidate"),
         ("get", "/api/instructor/docs/S01/answer-key"),
+        ("get", "/api/instructor/scenarios"),
+        ("get", "/api/instructor/topology/overlays/S01"),
+        ("get", "/api/instructor/integrity-events"),
+        ("post", "/api/instructor/integrity-events/1/acknowledge"),
         ("delete", "/api/instructor/profiles/not-real"),
         ("post", "/api/instructor/profiles/not-real/reset"),
     ]

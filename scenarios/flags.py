@@ -140,7 +140,7 @@ FLAGS_BY_SCENARIO: dict[str, list[Flag]] = {
             ["false"],
             points=9,
             category="Scenario output",
-            evidence_source="expected-impact.md",
+            evidence_source="Briefing and unauthorized-source evidence",
             objective_ids=["obj-correlate"],
             hints=[
                 Hint(
@@ -149,9 +149,10 @@ FLAGS_BY_SCENARIO: dict[str, list[Flag]] = {
                     "expected-impact.md argue?"
                 ),
                 Hint(
-                    "expected-impact.md's own words: 'absence of process impact "
-                    "is not evidence of absence of intrusion.' What does that "
-                    "imply about whether recon-only traffic is worth escalating?"
+                    "Compare the unfamiliar source's behavior with the fixed OT "
+                    "baseline. Decide whether confirmed unauthorized discovery "
+                    "activity should be dismissed solely because the process did "
+                    "not move."
                 ),
             ],
         ),
@@ -233,11 +234,9 @@ FLAGS_BY_SCENARIO: dict[str, list[Flag]] = {
                     "What condition has to be true for it to act at all?"
                 ),
                 Hint(
-                    "Both the level-control rung and the high-high interlock rung "
-                    "are conditioned on the plant's mode-selector coil — the same "
-                    "one you found the tag name for in the previous flag. "
-                    "Whichever of its two states is *not* automatic is the mode "
-                    "the plant was in."
+                    "Trace the mode-selector coil from the write event into the "
+                    "IF conditions in plc/logic/cedar_hollow.st. Report the mode "
+                    "represented by the written state."
                 ),
             ],
         ),
@@ -247,7 +246,7 @@ FLAGS_BY_SCENARIO: dict[str, list[Flag]] = {
             ["thermal overload", "thermal", "overload"],
             points=10,
             category="Process state",
-            evidence_source="expected-impact.md / HMI",
+            evidence_source="HMI / scenario output",
             objective_ids=["obj-impact"],
             hints=[
                 Hint(
@@ -256,10 +255,9 @@ FLAGS_BY_SCENARIO: dict[str, list[Flag]] = {
                     "happens physically when a pump has nowhere to send its flow."
                 ),
                 Hint(
-                    "expected-impact.md walks through it: current climbs from "
-                    "nominal toward a much higher value as the pump 'deadheads' "
-                    "against the full tank, and a protective trip latches out "
-                    "before the motor is damaged. Name that protection."
+                    "Correlate the final current rise with the pump fault field in "
+                    "the HMI or scenario output. Name the physical motor-protection "
+                    "device represented by that latched fault."
                 ),
             ],
         ),
@@ -301,8 +299,8 @@ FLAGS_BY_SCENARIO: dict[str, list[Flag]] = {
                     "microprocessor, no firmware, between the water and the bit."
                 ),
                 Hint(
-                    "It's the hardwired high-high float switch, not the analog "
-                    "level transmitter. What tag name is that float?"
+                    "Use plc/modbus-map.yml to identify the discrete, hardwired "
+                    "high-high measurement and submit its tag name."
                 ),
             ],
         ),
@@ -315,12 +313,11 @@ FLAGS_BY_SCENARIO: dict[str, list[Flag]] = {
             evidence_source="logs/modbus.log",
             objective_ids=["obj-view-manip"],
             hints=[
-                Hint("It's an input register — see detection.md's protocol note."),
+                Hint("Identify LT_101's register table in plc/modbus-map.yml first."),
                 Hint(
-                    "Input registers are read with function code 4 (Read Input "
-                    "Registers), and the protocol defines no write function code "
-                    "that targets them at all — that's *why* this point can't be "
-                    "attacked the same direct way S03's coil was."
+                    "Filter request records for LT_101's address and inspect the "
+                    "numeric func field: `jq 'select(.pdu_type==\"request\" and "
+                    ".address==0) | .func' logs/modbus.log | sort -u`."
                 ),
             ],
         ),
@@ -362,38 +359,14 @@ FLAGS_BY_SCENARIO: dict[str, list[Flag]] = {
                     "wrong from the moment it's created?"
                 ),
                 Hint(
-                    "detection.md and expected-impact.md both point to the same "
-                    "place: an undocumented register in process_sim/server.py "
-                    "(LT101_SPOOF_HR_INDEX) overrides the reported value before "
-                    "any legitimate read ever happens — nothing is intercepted "
-                    "in transit. Name the general category that place belongs "
-                    "to, contrasted with 'network'."
+                    "Search process_sim/server.py for the code that substitutes "
+                    "the reported LT_101 value. Classify the component executing "
+                    "that code, contrasted with an in-transit network appliance."
                 ),
             ],
         ),
     ],
     "S06": [
-        Flag(
-            "s06-creds",
-            "What default credential did the attacker use to log into "
-            "OpenPLC's web UI? (user/pass)",
-            ["openplc/openplc", "openplc / openplc"],
-            points=5,
-            category="Controller state",
-            evidence_source="OpenPLC web UI",
-            objective_ids=["obj-logic-mod"],
-            hints=[
-                Hint(
-                    "The attacker didn't guess or crack anything — they used the "
-                    "credential OpenPLC ships with, unchanged."
-                ),
-                Hint(
-                    "It's documented in OpenPLC's own public setup instructions "
-                    "and in this range's SECURITY.md — the username and "
-                    "password are the same word."
-                ),
-            ],
-        ),
         Flag(
             "s06-lines-removed",
             "How many lines of *functional* logic (the real interlock "
@@ -453,10 +426,9 @@ FLAGS_BY_SCENARIO: dict[str, list[Flag]] = {
                     "inspects that protocol."
                 ),
                 Hint(
-                    "The compromise is entirely over HTTP to OpenPLC's web UI "
-                    "(login, upload-program, compile-program). Check "
-                    "detection.md's opening section — does sensor/ or router/ "
-                    "inspect HTTP at all?"
+                    "Inventory the protocols handled by sensor/ and router/, then "
+                    "compare that list with the protocol used by the controller's "
+                    "programming interface. Base the yes/no conclusion on that gap."
                 ),
             ],
         ),
@@ -467,7 +439,7 @@ FLAGS_BY_SCENARIO: dict[str, list[Flag]] = {
             ["yes"],
             points=12,
             category="Scenario output",
-            evidence_source="answer-key.md comparison table",
+            evidence_source="Approved vs. recovered controller behavior",
             objective_ids=["obj-impact", "obj-blind-spot"],
             hints=[
                 Hint(
@@ -476,11 +448,9 @@ FLAGS_BY_SCENARIO: dict[str, list[Flag]] = {
                     "in both cases?"
                 ),
                 Hint(
-                    "answer-key.md's comparison table spells it out: S03's "
-                    "writes stop working and the plant reverts on the next "
-                    "control scan once access is revoked. S06's malicious "
-                    "*program* keeps running regardless, because it was never a "
-                    "live command — it's the configuration itself."
+                    "After the scenario, distinguish a transient command from a "
+                    "stored controller-program change. Decide what happens to the "
+                    "running logic if the attacker's connection disappears."
                 ),
             ],
         ),
