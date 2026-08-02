@@ -560,9 +560,10 @@ export function openPrintableReport(reportOrReports, title) {
       <tr><th>Local profile ID</th><td>${escapeHtml(profile.localProfileId)}</td></tr>
     </table>`
     : "";
-  win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title>
+  win.document.write(`<!doctype html><html><head><meta charset="utf-8"><meta name="color-scheme" content="light only"><title>${escapeHtml(title)}</title>
     <style>
-      body { font-family: -apple-system, "Segoe UI", Arial, sans-serif; padding: 28px; color: #111; }
+      :root { color-scheme: light only; }
+      body { background: #fff; font-family: -apple-system, "Segoe UI", Arial, sans-serif; padding: 28px; color: #111; }
       h1 { font-size: 1.3rem; } h2 { font-size: 1.05rem; margin-top: 24px; }
       table { border-collapse: collapse; width: 100%; margin-bottom: 12px; }
       td, th { border: 1px solid #ccc; padding: 6px 10px; text-align: left; font-size: 0.85rem; vertical-align: top; }

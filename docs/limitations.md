@@ -111,3 +111,12 @@ limitation somebody else discovers the hard way.
     actually launches WSL, clones the repo, and opens a browser on a
     real PC" is not. See the README's Windows section and the .iss
     file's own header for what's checked vs. assumed.
+15. **Browser extensions that forcibly recolor pages can override the map's
+    SVG paint.** The Student Lab declares a standards-based dark-only color
+    scheme and assigns every essential SVG surface and text paint explicitly.
+    Clean Chromium, Firefox, and Edge render it consistently. Extensions such
+    as Dark Reader may still deliberately rewrite inline SVG after the page is
+    styled, producing pale cards with light text while browser developer tools
+    continue to report the original dark fills. Disable the extension for
+    `127.0.0.1`/`localhost` (or add the range to its site exclusion list) when
+    using the built-in dark interface.

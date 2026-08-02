@@ -23,7 +23,7 @@ import {
   wireNotesField,
 } from "./training.js";
 import { apiRequest } from "./api.js";
-import { initNetworkMap, resetMapView, setMapOverlay, toggleMapPorts, updateMapHealth } from "./networkmap.js?v=phase2a-map-dark-1";
+import { initNetworkMap, resetMapView, setMapOverlay, toggleMapPorts, updateMapHealth } from "./networkmap.js?v=map-browser-paint-3";
 
 const SCENARIOS = JSON.parse(document.getElementById("scenarios-data").textContent);
 const SCENARIOS_BY_ID = Object.fromEntries(SCENARIOS.map((s) => [s.id, s]));

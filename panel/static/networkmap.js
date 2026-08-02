@@ -136,10 +136,6 @@ function render() {
 
 function renderDefinitions(svg) {
   const defs = svgEl("defs");
-  const shadow = svgEl("filter", { id: "node-shadow", x: "-25%", y: "-30%", width: "150%", height: "170%" });
-  shadow.appendChild(svgEl("feDropShadow", { dx: 0, dy: 5, stdDeviation: 7, "flood-color": "#000", "flood-opacity": 0.34 }));
-  defs.appendChild(shadow);
-
   for (const [id, color] of [
     ["arrow-normal", "#66717e"],
     ["arrow-monitored", "#4fb3d9"],
@@ -240,13 +236,15 @@ function renderNodes(svg, overlay) {
     if (detection.has(node.id)) classes.push("detection");
     if (_selectedNodeId === node.id) classes.push("selected");
 
+    const health = nodeHealth(node.id);
+    const healthLabel = health === null ? "status unavailable" : health ? "service healthy" : "service offline";
     const group = svgEl("g", {
       class: classes.join(" "),
       "data-node": node.id,
       tabindex: 0,
       role: "button",
       "aria-pressed": String(_selectedNodeId === node.id),
-      "aria-label": `${node.label}, ${_topology.zones[node.zone]?.label || node.zone}`,
+      "aria-label": `${node.label}, ${_topology.zones[node.zone]?.label || node.zone}, ${healthLabel}`,
       transform: `translate(${position.x - NODE_W / 2}, ${position.y - NODE_H / 2})`,
     });
     group.appendChild(svgEl("rect", { width: NODE_W, height: NODE_H, rx: 12, class: "node-shape" }));
@@ -264,9 +262,17 @@ function renderNodes(svg, overlay) {
     detail.textContent = nodeSubtitle(node);
     group.appendChild(detail);
 
-    const health = nodeHealth(node.id);
     if (health !== null) {
       group.appendChild(svgEl("circle", { cx: NODE_W - 16, cy: 20, r: 6, class: `health-dot ${health ? "ok" : "bad"}` }));
+      const healthSymbol = svgEl("text", {
+        x: NODE_W - 16,
+        y: 23,
+        "text-anchor": "middle",
+        class: `health-symbol ${health ? "ok" : "bad"}`,
+        "aria-hidden": "true",
+      });
+      healthSymbol.textContent = health ? "✓" : "×";
+      group.appendChild(healthSymbol);
     }
 
     const callout = nodeCallout(node.id, overlay);

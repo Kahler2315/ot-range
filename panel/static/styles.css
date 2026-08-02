@@ -6,6 +6,8 @@
    badges. No remote fonts, no CDN assets — system font stack only. */
 
 :root {
+  color-scheme: dark only;
+
   /* color */
   --bg: #0b0c0e;
   --bg-raise: #131518;
@@ -466,11 +468,58 @@ textarea.notes-field {
   background: #0a1016; border: 1px solid #354452; border-radius: var(--radius-lg); box-shadow: inset 0 1px rgba(255, 255, 255, 0.025);
   overflow: auto; touch-action: none;
 }
-#map-svg { width: 100%; height: 540px; display: block; cursor: grab; }
+#map-svg {
+  /* SVG paint tokens live on the SVG root deliberately. Chromium's SVG
+     paint pipeline must not have to inherit page text colors or infer
+     surfaces from browser defaults. Every essential paint below also has
+     a literal fallback at its use site. */
+  --map-node-surface: #101a22;
+  --map-node-border: #718797;
+  --map-node-primary: #f4f7f9;
+  --map-node-secondary: #ced9e0;
+  --map-badge-surface: #263946;
+  --map-badge-border: #647d8e;
+  --map-badge-text: #f0f6fa;
+  --map-protocol-surface: #07121a;
+  --map-protocol-border: #91a8b8;
+  --map-protocol-text: #f4f7f9;
+  --map-zone-untrusted: rgba(240, 160, 32, 0.055);
+  --map-zone-untrusted-border: #665338;
+  --map-zone-boundary: rgba(83, 199, 240, 0.06);
+  --map-zone-boundary-border: #34647a;
+  --map-zone-trusted: rgba(69, 113, 148, 0.075);
+  --map-zone-trusted-border: #3c5365;
+  --map-zone-title: #e7edf2;
+  --map-zone-subtitle: #8292a1;
+  --map-health-ok: #48d597;
+  --map-health-bad: #ff6b5f;
+  --map-health-symbol: #07121a;
+  --map-traffic-normal: #9cabb9;
+  --map-traffic-monitored: #62d6ff;
+  --map-traffic-attack: #ff6b5f;
+  --map-traffic-attack-halo: rgba(255, 42, 42, 0.27);
+  --map-selected-surface: #182731;
+  --map-selected-border: #f0a020;
+  --map-affected-surface: #291719;
+  --map-affected-border: #ff6b5f;
+  --map-detection-surface: #10262e;
+  --map-detection-border: #53c7f0;
+  --map-attack-label-surface: #3d1115;
+  color-scheme: dark only;
+  color: var(--map-node-primary, #f4f7f9);
+  cursor: grab;
+  display: block;
+  fill: none;
+  height: 540px;
+  isolation: isolate;
+  stroke: none;
+  width: 100%;
+}
 #map-svg:active { cursor: grabbing; }
 .map-node { cursor: pointer; }
 .map-node .node-shape {
-  fill: #101a22; filter: url(#node-shadow); stroke: #718797; stroke-width: 1.75;
+  fill: var(--map-node-surface, #101a22); filter: none;
+  stroke: var(--map-node-border, #718797); stroke-width: 1.75;
   transition: fill var(--transition), stroke var(--transition), stroke-width var(--transition);
 }
 .map-node .node-accent { fill: #8493a2; stroke: none; }
@@ -481,44 +530,53 @@ textarea.notes-field {
 .map-node-hmi .node-accent, .map-node-dashboard .node-accent { fill: #53c7f0; }
 .map-node-database .node-accent, .map-node-historian .node-accent { fill: #8ca0b3; }
 .map-node:hover .node-shape, .map-node:focus .node-shape, .map-node.selected .node-shape {
-  fill: #182731; stroke: #f0a020; stroke-width: 2.5;
+  fill: var(--map-selected-surface, #182731);
+  stroke: var(--map-selected-border, #f0a020); stroke-width: 2.5;
 }
-.map-node .node-kind-pill { fill: #263946; stroke: #647d8e; stroke-width: 1; }
-.map-node .node-kind-text { fill: #f0f6fa; font-family: var(--mono); font-size: 10px; font-weight: 850; letter-spacing: 0.06em; }
-.map-node .node-label { fill: #ffffff; font-family: var(--sans); font-size: 14px; font-weight: 800; }
-.map-node .node-detail-text { fill: #ced9e0; font-family: var(--mono); font-size: 11px; font-weight: 650; }
-.map-node .health-dot { stroke: #101a22; stroke-width: 2; }
-.map-node .health-dot.ok { fill: #48d597; }
-.map-node .health-dot.bad { fill: #ff6b5f; }
-.map-node.affected .node-shape { fill: #291719; stroke: #ff6b5f; stroke-width: 3; }
-.map-node.affected .node-accent { fill: #ff6b5f; }
-.map-node.detection .node-shape { fill: #10262e; stroke: #53c7f0; stroke-width: 3; }
-.map-node.detection .node-accent { fill: #53c7f0; }
+.map-node .node-kind-pill { fill: var(--map-badge-surface, #263946); stroke: var(--map-badge-border, #647d8e); stroke-width: 1; }
+.map-node .node-kind-text { fill: var(--map-badge-text, #f0f6fa); font-family: var(--mono); font-size: 10px; font-weight: 850; letter-spacing: 0.06em; }
+.map-node .node-label { fill: var(--map-node-primary, #f4f7f9); font-family: var(--sans); font-size: 14px; font-weight: 800; }
+.map-node .node-detail-text { fill: var(--map-node-secondary, #ced9e0); font-family: var(--mono); font-size: 11px; font-weight: 650; }
+.map-node .health-dot { stroke: var(--map-node-surface, #101a22); stroke-width: 1.5; }
+.map-node .health-dot.ok { fill: var(--map-health-ok, #48d597); }
+.map-node .health-dot.bad { fill: var(--map-health-bad, #ff6b5f); }
+.map-node .health-symbol { fill: var(--map-health-symbol, #07121a); font-family: var(--sans); font-size: 8px; font-weight: 900; pointer-events: none; }
+.map-node.affected .node-shape { fill: var(--map-affected-surface, #291719); stroke: var(--map-affected-border, #ff6b5f); stroke-width: 3; }
+.map-node.affected .node-accent { fill: var(--map-affected-border, #ff6b5f); }
+.map-node.detection .node-shape { fill: var(--map-detection-surface, #10262e); stroke: var(--map-detection-border, #53c7f0); stroke-width: 3; }
+.map-node.detection .node-accent { fill: var(--map-detection-border, #53c7f0); }
+/* Selection is an interaction state and must remain visible even when an
+   overlay also marks the same node as affected or as a detection point. */
+.map-node.selected .node-shape {
+  fill: var(--map-selected-surface, #182731);
+  stroke: var(--map-selected-border, #f0a020);
+  stroke-width: 3.5;
+}
 .map-callout { fill: #19232c; stroke-width: 1.5; }
 .map-callout.truth { stroke: #48d597; }
 .map-callout.affected { stroke: #ff6b5f; }
 .map-callout-text { font-family: var(--mono); font-size: 9px; font-weight: 800; letter-spacing: 0.05em; }
 .map-callout-text.truth { fill: #72e5b0; }
 .map-callout-text.affected { fill: #ff8b82; }
-.map-edge { fill: none; stroke: #9cabb9; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2.5; }
+.map-edge { fill: none; stroke: var(--map-traffic-normal, #9cabb9); stroke-linecap: round; stroke-linejoin: round; stroke-width: 2.5; }
 .map-edge.unmonitored { stroke-dasharray: 5 5; }
-.map-edge.monitored { stroke: #62d6ff; stroke-width: 3.2; }
+.map-edge.monitored { stroke: var(--map-traffic-monitored, #62d6ff); stroke-width: 3.2; }
 .map-edge.subdued { opacity: 0.28; }
-.map-edge-attack-halo { fill: none; stroke: rgba(255, 42, 42, 0.27); stroke-linecap: round; stroke-linejoin: round; stroke-width: 12; }
+.map-edge-attack-halo { fill: none; stroke: var(--map-traffic-attack-halo, rgba(255, 42, 42, 0.27)); stroke-linecap: round; stroke-linejoin: round; stroke-width: 12; }
 .map-edge.attack-path {
-  animation: map-attack-flow 0.9s linear infinite; stroke: #ff6b5f; stroke-dasharray: 10 7; stroke-width: 4.5;
+  animation: map-attack-flow 0.9s linear infinite; stroke: var(--map-traffic-attack, #ff6b5f); stroke-dasharray: 10 7; stroke-width: 4.5;
 }
 @keyframes map-attack-flow { to { stroke-dashoffset: -17; } }
-.map-edge-label rect { fill: #07121a; stroke: #91a8b8; stroke-width: 1.25; }
-.map-edge-label text { fill: #ffffff; font-family: var(--mono); font-size: 9.5px; font-weight: 850; }
-.map-edge-label.attack-label rect { fill: #3d1115; stroke: #ff6b5f; }
-.map-edge-label.attack-label text { fill: #ffffff; }
+.map-edge-label rect { fill: var(--map-protocol-surface, #07121a); stroke: var(--map-protocol-border, #91a8b8); stroke-width: 1.25; }
+.map-edge-label text { fill: var(--map-protocol-text, #f4f7f9); font-family: var(--mono); font-size: 9.5px; font-weight: 850; }
+.map-edge-label.attack-label rect { fill: var(--map-attack-label-surface, #3d1115); stroke: var(--map-traffic-attack, #ff6b5f); }
+.map-edge-label.attack-label text { fill: var(--map-protocol-text, #f4f7f9); }
 .map-zone-rect { stroke-width: 1.5; }
-.map-zone-untrusted .map-zone-rect { fill: rgba(240, 160, 32, 0.055); stroke: #665338; }
-.map-zone-boundary .map-zone-rect { fill: rgba(83, 199, 240, 0.06); stroke: #34647a; }
-.map-zone-trusted .map-zone-rect { fill: rgba(69, 113, 148, 0.075); stroke: #3c5365; }
-.map-zone-title { fill: #e7edf2; font-family: var(--sans); font-size: 13px; font-weight: 750; }
-.map-zone-subtitle { fill: #8292a1; font-family: var(--mono); font-size: 9px; }
+.map-zone-untrusted .map-zone-rect { fill: var(--map-zone-untrusted, rgba(240, 160, 32, 0.055)); stroke: var(--map-zone-untrusted-border, #665338); }
+.map-zone-boundary .map-zone-rect { fill: var(--map-zone-boundary, rgba(83, 199, 240, 0.06)); stroke: var(--map-zone-boundary-border, #34647a); }
+.map-zone-trusted .map-zone-rect { fill: var(--map-zone-trusted, rgba(69, 113, 148, 0.075)); stroke: var(--map-zone-trusted-border, #3c5365); }
+.map-zone-title { fill: var(--map-zone-title, #e7edf2); font-family: var(--sans); font-size: 13px; font-weight: 750; }
+.map-zone-subtitle { fill: var(--map-zone-subtitle, #8292a1); font-family: var(--mono); font-size: 9px; }
 .map-legend { display: flex; gap: var(--sp-4); flex-wrap: wrap; margin-top: var(--sp-3); font-size: var(--fs-xs); color: var(--text-dim); }
 .legend-item { display: flex; align-items: center; gap: 6px; }
 .legend-swatch { width: 20px; height: 2px; display: inline-block; }
@@ -573,7 +631,17 @@ textarea.notes-field {
 @media print {
   .sidebar, .app-header, .console-drawer, .drawer-overlay, .modal-overlay, .dialog-overlay,
   .readiness-actions, .report-actions, .open-scenario-btn { display: none !important; }
+  :root { color-scheme: light; }
   body { background: #fff; color: #000; }
+}
+
+@media (forced-colors: active) {
+  #map-svg { color-scheme: light dark; }
+  .map-node .node-shape, .map-edge-label rect, .map-callout { fill: Canvas; stroke: CanvasText; }
+  .map-node .node-label, .map-node .node-detail-text, .map-node .node-kind-text,
+  .map-edge-label text, .map-zone-title, .map-zone-subtitle { fill: CanvasText; }
+  .map-node.selected .node-shape, .map-node.detection .node-shape { stroke: Highlight; stroke-width: 3; }
+  .map-edge.attack-path { stroke: LinkText; }
 }
 
 /* ---------- workspace chooser / authentication ---------- */

@@ -67,4 +67,5 @@ addopts = "-ra"
 markers = [
   "e2e: end-to-end attack/detection tests that start real processes and sockets",
   "docker: tests that build/run Docker containers (OpenPLC integration) — skipped if Docker isn't reachable",
+  "browser: cross-engine browser rendering tests that require Chromium and/or Firefox",
 ]

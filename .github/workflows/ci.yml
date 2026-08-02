@@ -53,7 +53,7 @@ jobs:
         # containers (OpenPLC from source, now Zeek/Suricata too) and
         # belong in openplc-integration.yml's separate, slower job so
         # this one stays fast on every push. Matches `make test`.
-        run: pytest -m "not e2e and not docker"
+        run: pytest -m "not e2e and not docker and not browser"
 
       - name: Smoke test
         run: PYTHON=python bash tests/smoke.sh
@@ -74,3 +74,37 @@ jobs:
         with:
           name: sbom
           path: sbom.cyclonedx.json
+
+  browser-rendering:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Verify browser availability
+        run: |
+          google-chrome --version || chromium --version
+          firefox --version
+
+      - name: Chromium and Firefox map rendering
+        env:
+          OT_RANGE_BROWSER_ARTIFACT_DIR: /tmp/ot-range-browser-artifacts
+        run: pytest -m browser -v
+
+      - name: Upload map screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: network-map-browser-screenshots
+          path: /tmp/ot-range-browser-artifacts
+          if-no-files-found: warn

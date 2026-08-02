@@ -239,3 +239,30 @@ def test_student_header_exposes_copyable_range_tool_logins(client):
     assert 'data-copy-value="openplc"' in html
     assert 'data-copy-value="admin"' in html
     assert "not your instructor password" in html
+
+
+def test_dark_theme_metadata_and_svg_paint_are_explicit(client):
+    html = client.get("/student").get_data(as_text=True)
+    styles = (panel_app.REPO_ROOT / "panel/static/styles.css").read_text()
+    networkmap = (panel_app.REPO_ROOT / "panel/static/networkmap.js").read_text()
+
+    assert '<meta name="color-scheme" content="dark only">' in html
+    assert '<meta name="theme-color" content="#0b0c0e">' in html
+    for token in (
+        "--map-node-surface",
+        "--map-node-border",
+        "--map-node-primary",
+        "--map-node-secondary",
+        "--map-badge-surface",
+        "--map-protocol-surface",
+        "--map-zone-trusted",
+        "--map-health-ok",
+        "--map-health-bad",
+        "--map-traffic-monitored",
+        "--map-traffic-attack",
+        "--map-selected-surface",
+        "--map-detection-surface",
+    ):
+        assert token in styles
+    assert "filter: none" in styles
+    assert "feDropShadow" not in networkmap

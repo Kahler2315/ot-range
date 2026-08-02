@@ -1,4 +1,4 @@
-.PHONY: setup sim tap hmi points dump watch test test-e2e test-docker smoke \
+.PHONY: setup sim tap hmi points dump watch test test-e2e test-docker test-browser smoke \
         scenario scenario-S01 scenario-S03 scenario-S05 scenario-S06 \
         scenario-S01-docker scenario-S03-docker \
         detect learn-baseline lint security clean \
@@ -135,13 +135,16 @@ scenario-S06:
 ## --- tests and gates ---
 
 test:
-	$(PYTHON) -m pytest -m "not e2e and not docker"
+	$(PYTHON) -m pytest -m "not e2e and not docker and not browser"
 
 test-e2e:
 	$(PYTHON) -m pytest -m e2e
 
 test-docker:
 	$(PYTHON) -m pytest -m docker -v
+
+test-browser:
+	$(PYTHON) -m pytest -m browser -v
 
 smoke:
 	PYTHON=$(PYTHON) bash tests/smoke.sh

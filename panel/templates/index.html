@@ -3,8 +3,10 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark only">
+  <meta name="theme-color" content="#0b0c0e">
   <title>Cedar Hollow OT Range — Student Lab</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css', v='phase2a-map-dark-1') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css', v='map-browser-paint-3') }}">
 </head>
 <body>
   <div class="app-shell">
@@ -324,7 +326,7 @@
   <div id="solution-docs-data" hidden>{{ solution_docs | tojson }}</div>
   <div id="profile-data" hidden>{{ profile | tojson }}</div>
 
-  <script type="module" src="{{ url_for('static', filename='app.js', v='phase2a-map-dark-1') }}"></script>
-  <script type="module" src="{{ url_for('static', filename='student.js', v='phase2a-map-dark-1') }}"></script>
+  <script type="module" src="{{ url_for('static', filename='app.js', v='map-browser-paint-3') }}"></script>
+  <script type="module" src="{{ url_for('static', filename='student.js', v='map-browser-paint-3') }}"></script>
 </body>
 </html>
