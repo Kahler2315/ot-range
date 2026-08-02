@@ -6,236 +6,258 @@
   <title>OT Range — Control Panel</title>
   <style>
     :root {
-      --bg: #0a0f18;
-      --bg-raise: #101828;
-      --panel: #131d2e;
-      --panel-border: #22314a;
-      --text: #e7edf6;
-      --text-dim: #8fa0b8;
-      --text-faint: #5c6d85;
-      --accent: #22d3ee;
-      --accent-dim: #0e5a68;
-      --good: #34d399;
-      --bad: #f87171;
-      --warn: #fbbf24;
+      --bg: #0b0c0e;
+      --panel: #16181c;
+      --panel-2: #1c1f24;
+      --border: #292d34;
+      --text: #eceff2;
+      --text-dim: #98a1ad;
+      --text-faint: #565d68;
+      --accent: #f0a020;
+      --accent-soft: rgba(240, 160, 32, 0.13);
+      --good: #3ecf8e;
+      --bad: #ef5b5b;
       --mono: 'Cascadia Code', 'JetBrains Mono', Consolas, monospace;
+      --sans: -apple-system, 'Segoe UI', Inter, Arial, sans-serif;
     }
     * { box-sizing: border-box; }
+    html { scrollbar-color: var(--border) transparent; }
     body {
-      background: radial-gradient(ellipse 1200px 600px at 20% -10%, #142132 0%, var(--bg) 55%);
-      color: var(--text); font-family: -apple-system, 'Segoe UI', Inter, Arial, sans-serif;
-      margin: 0; padding: 0 0 140px;
+      background-color: var(--bg);
+      background-image:
+        linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+      background-size: 28px 28px;
+      color: var(--text); font-family: var(--sans);
+      margin: 0; padding: 0 0 130px;
     }
     a { color: var(--accent); }
 
     header {
       position: sticky; top: 0; z-index: 5;
-      background: rgba(10, 15, 24, 0.92); backdrop-filter: blur(8px);
-      border-bottom: 1px solid var(--panel-border);
-      padding: 16px 32px; display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
+      background: rgba(11, 12, 14, 0.88); backdrop-filter: blur(10px);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 28px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
     }
-    .brand { display: flex; align-items: baseline; gap: 10px; }
-    .brand .mark {
-      font-weight: 800; letter-spacing: 0.02em; font-size: 1.25rem; color: #fff;
+    .brand { display: flex; align-items: center; gap: 10px; }
+    .brand .wordmark {
+      font-family: var(--mono); font-weight: 700; letter-spacing: 0.04em; font-size: 1rem;
+      color: #fff;
     }
-    .brand .mark span { color: var(--accent); }
-    .brand .tagline { font-size: 0.78rem; color: var(--text-dim); }
+    .brand .tagline {
+      font-size: 0.74rem; color: var(--text-faint); border-left: 1px solid var(--border);
+      padding-left: 10px; margin-left: 2px;
+    }
     header .spacer { flex: 1; }
     .flags-chip {
-      display: flex; align-items: center; gap: 8px; background: var(--panel);
-      border: 1px solid var(--panel-border); border-radius: 20px; padding: 6px 14px;
-      font-size: 0.85rem; font-weight: 600;
+      display: flex; align-items: center; gap: 7px; background: var(--panel);
+      border: 1px solid var(--border); border-radius: 7px; padding: 6px 12px;
+      font-size: 0.82rem; font-family: var(--mono); color: var(--text-dim);
     }
-    .flags-chip .fill { color: var(--warn); }
+    .flags-chip b { color: var(--accent); font-weight: 700; }
 
-    main { padding: 24px 32px; max-width: 1400px; margin: 0 auto; }
-    section { margin-bottom: 30px; }
-    .eyebrow {
-      font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.09em;
-      color: var(--text-faint); font-weight: 700; margin: 0 0 12px;
-    }
-    .panel {
-      background: var(--panel); border: 1px solid var(--panel-border); border-radius: 12px;
-      padding: 18px 20px;
-    }
+    main { padding: 22px 28px; max-width: 1180px; margin: 0 auto; }
     .security-note {
-      font-size: 0.82rem; color: var(--text-dim); margin: -14px 0 24px;
+      font-size: 0.78rem; color: var(--text-faint); margin: 0 0 18px;
     }
-    .security-note a { color: var(--text-dim); text-decoration: underline; }
+    .security-note a { color: var(--text-faint); text-decoration: underline; }
 
-    .toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    .eyebrow {
+      font-family: var(--mono); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em;
+      color: var(--text-faint); font-weight: 600; margin: 0 0 10px;
+    }
+
+    /* --- unified control strip --- */
+    .control-strip {
+      background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+      padding: 12px 16px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+      margin-bottom: 26px;
+    }
+    .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
     button {
-      font-family: inherit; font-size: 0.86rem; font-weight: 600; border: none;
-      border-radius: 8px; padding: 10px 18px; cursor: pointer; transition: all 0.15s;
-      color: #061018;
+      font-family: var(--sans); font-size: 0.82rem; font-weight: 600; border: none;
+      border-radius: 6px; padding: 8px 14px; cursor: pointer; transition: all 0.12s;
     }
     button:disabled { opacity: 0.35; cursor: not-allowed; }
-    button:not(:disabled):hover { transform: translateY(-1px); filter: brightness(1.08); }
-    .btn-primary { background: var(--accent); color: #04222b; }
-    .btn-danger { background: var(--bad); color: #2b0908; }
-    .btn-warn { background: var(--warn); color: #2b1f04; }
-    .btn-ghost { background: transparent; color: var(--text-dim); border: 1px solid var(--panel-border); }
-    .busy-note { color: var(--warn); font-size: 0.84rem; display: none; }
+    button:not(:disabled):hover { filter: brightness(1.12); }
+    .btn-primary { background: var(--accent); color: #211502; }
+    .btn-danger { background: var(--panel-2); color: var(--bad); border: 1px solid #3a2426; }
+    .btn-warn { background: var(--panel-2); color: #e0a83e; border: 1px solid #3a2f1c; }
+    .btn-ghost { background: transparent; color: var(--text-dim); border: 1px solid var(--border); }
+    .busy-note { color: var(--accent); font-size: 0.8rem; display: none; font-family: var(--mono); }
 
-    .status-grid {
-      display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 8px;
+    .strip-sep { width: 1px; align-self: stretch; background: var(--border); }
+    .status-groups { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; font-family: var(--mono); }
+    .status-group { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .chip {
+      display: inline-flex; align-items: center; gap: 5px; font-size: 0.74rem;
+      padding: 3px 8px; border-radius: 5px; background: var(--panel-2); color: var(--text-dim);
+      white-space: nowrap;
     }
-    .status-item {
-      display: flex; align-items: center; gap: 10px; font-size: 0.86rem;
-      padding: 9px 4px; border-bottom: 1px solid #1a2540;
-    }
-    .status-item:last-child { border-bottom: none; }
-    .dot {
-      width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; background: var(--text-faint);
-      box-shadow: 0 0 0 3px transparent;
-    }
-    .dot.ok { background: var(--good); box-shadow: 0 0 8px 1px rgba(52,211,153,0.5); }
-    .dot.bad { background: var(--bad); box-shadow: 0 0 8px 1px rgba(248,113,113,0.4); }
-    .status-item a { margin-left: auto; font-size: 0.78rem; }
+    .chip a { color: inherit; text-decoration: none; }
+    .chip a:hover { color: var(--accent); }
+    .dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; background: var(--text-faint); }
+    .dot.ok { background: var(--good); box-shadow: 0 0 5px 0 rgba(62,207,142,0.6); }
+    .dot.bad { background: var(--bad); box-shadow: 0 0 5px 0 rgba(239,91,91,0.5); }
+    .status-empty { font-size: 0.78rem; color: var(--text-faint); font-family: var(--sans); }
 
-    .scenario-grid {
-      display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px;
+    /* --- scenario list --- */
+    .scenario-list { display: flex; flex-direction: column; gap: 6px; }
+    .scenario-row {
+      background: var(--panel); border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
     }
-    .scenario-card {
-      background: var(--panel); border: 1px solid var(--panel-border); border-radius: 12px;
-      padding: 18px 20px 16px; display: flex; flex-direction: column; gap: 10px;
-      border-top: 3px solid var(--accent-color, var(--accent)); transition: border-color 0.2s;
-      position: relative;
+    .scenario-row-head {
+      display: flex; align-items: center; gap: 12px; padding: 12px 16px; cursor: pointer;
+      user-select: none;
     }
-    .scenario-card .top-row { display: flex; align-items: center; justify-content: space-between; }
-    .scenario-card .sid {
-      font-family: var(--mono); font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em;
-      color: var(--accent-color, var(--accent));
-      background: color-mix(in srgb, var(--accent-color, var(--accent)) 15%, transparent);
-      padding: 2px 8px; border-radius: 5px;
+    .scenario-row-head:hover { background: var(--panel-2); }
+    .chevron {
+      font-family: var(--mono); color: var(--text-faint); font-size: 0.7rem; width: 10px;
+      transition: transform 0.15s; flex-shrink: 0;
     }
-    .scenario-card .flag-count {
-      font-size: 0.74rem; color: var(--text-faint); font-family: var(--mono);
+    .scenario-row.open .chevron { transform: rotate(90deg); }
+    .sid {
+      font-family: var(--mono); font-size: 0.72rem; font-weight: 700; letter-spacing: 0.05em;
+      color: var(--text-dim); background: var(--panel-2); padding: 3px 7px; border-radius: 4px;
+      flex-shrink: 0;
     }
-    .scenario-card .flag-count.complete { color: var(--good); }
-    .scenario-card h3 { margin: 0; font-size: 1.08rem; color: #fff; }
-    .scenario-card .hook { color: var(--text-dim); font-size: 0.87rem; line-height: 1.45; }
-    .scenario-card .meta { font-size: 0.8rem; color: var(--text-dim); line-height: 1.55; }
-    .scenario-card .meta b { color: var(--text); font-weight: 600; }
-    .scenario-card .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 2px; }
+    .stitle { font-weight: 600; font-size: 0.92rem; flex-shrink: 0; }
+    .row-hook {
+      color: var(--text-faint); font-size: 0.82rem; overflow: hidden; text-overflow: ellipsis;
+      white-space: nowrap; flex: 1; min-width: 0;
+    }
+    .row-flags {
+      font-family: var(--mono); font-size: 0.72rem; color: var(--text-faint);
+      background: var(--panel-2); padding: 3px 8px; border-radius: 10px; flex-shrink: 0;
+    }
+    .row-flags.complete { color: var(--good); }
+
+    .scenario-row-body {
+      padding: 4px 16px 18px 38px; border-top: 1px solid var(--border);
+      display: flex; flex-direction: column; gap: 10px;
+    }
+    .scenario-row-body[hidden] { display: none; }
+    .meta { font-size: 0.84rem; color: var(--text-dim); line-height: 1.55; }
+    .meta b { color: var(--text); font-weight: 600; }
+    .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 2px; }
     select {
-      background: var(--bg-raise); color: var(--text); border: 1px solid var(--panel-border);
-      border-radius: 7px; padding: 8px 10px; font-size: 0.82rem; font-family: inherit;
+      background: var(--bg); color: var(--text); border: 1px solid var(--border);
+      border-radius: 6px; padding: 7px 10px; font-size: 0.8rem; font-family: var(--sans);
       flex: 1; min-width: 140px;
     }
     .doc-links { display: flex; gap: 14px; font-size: 0.78rem; flex-wrap: wrap; }
     .doc-links a, .doc-links button.link {
       cursor: pointer; background: none; border: none; padding: 0; font: inherit;
-      color: var(--accent); text-decoration: none;
+      color: var(--text-dim); text-decoration: none;
     }
-    .doc-links button.link.flags-link { color: var(--warn); font-weight: 700; }
+    .doc-links a:hover, .doc-links button.link:hover { color: var(--accent); }
+    .doc-links button.link.flags-link { color: var(--accent); font-weight: 600; }
 
     #console-wrap {
-      position: fixed; left: 0; right: 0; bottom: 0; background: #060a11;
-      border-top: 1px solid var(--panel-border); box-shadow: 0 -8px 30px rgba(0,0,0,0.5);
+      position: fixed; left: 0; right: 0; bottom: 0; background: #08090a;
+      border-top: 1px solid var(--border); box-shadow: 0 -8px 30px rgba(0,0,0,0.5);
       max-height: 42vh; display: none; flex-direction: column; z-index: 8;
     }
     #console-header {
-      display: flex; align-items: center; gap: 12px; padding: 10px 20px;
-      background: var(--bg-raise); font-size: 0.82rem; color: var(--text-dim);
-      border-bottom: 1px solid var(--panel-border);
+      display: flex; align-items: center; gap: 12px; padding: 9px 20px;
+      background: var(--panel); font-size: 0.8rem; color: var(--text-dim); font-family: var(--mono);
+      border-bottom: 1px solid var(--border);
     }
     #console-header .status-badge {
-      padding: 3px 11px; border-radius: 10px; font-weight: 700; font-size: 0.72rem;
+      padding: 2px 10px; border-radius: 4px; font-weight: 700; font-size: 0.7rem;
     }
-    .status-badge.running { background: rgba(34,211,238,0.15); color: var(--accent); }
-    .status-badge.ok { background: rgba(52,211,153,0.15); color: var(--good); }
-    .status-badge.fail { background: rgba(248,113,113,0.15); color: var(--bad); }
+    .status-badge.running { background: var(--accent-soft); color: var(--accent); }
+    .status-badge.ok { background: rgba(62,207,142,0.13); color: var(--good); }
+    .status-badge.fail { background: rgba(239,91,91,0.13); color: var(--bad); }
     #console-close { margin-left: auto; background: none; color: var(--text-faint); padding: 2px 8px; }
     #console-body {
       overflow-y: auto; padding: 14px 20px; font-family: var(--mono);
-      font-size: 0.8rem; white-space: pre-wrap; line-height: 1.55; color: #cfe3f5;
+      font-size: 0.8rem; white-space: pre-wrap; line-height: 1.55; color: #d7dee6;
     }
 
     #modal-overlay {
-      display: none; position: fixed; inset: 0; background: rgba(4,7,12,0.72);
+      display: none; position: fixed; inset: 0; background: rgba(4,5,6,0.75);
       align-items: center; justify-content: center; z-index: 10; backdrop-filter: blur(2px);
     }
     #modal-box {
-      background: var(--bg-raise); border: 1px solid var(--panel-border); border-radius: 14px;
+      background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
       width: min(720px, 92vw); max-height: 82vh; display: flex; flex-direction: column;
       overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,0.5);
     }
-    #modal-title { padding: 16px 22px; font-weight: 700; border-bottom: 1px solid var(--panel-border); }
+    #modal-title { padding: 14px 20px; font-weight: 700; font-family: var(--mono); font-size: 0.88rem; border-bottom: 1px solid var(--border); }
     #modal-body {
-      padding: 18px 22px; overflow-y: auto; white-space: pre-wrap;
-      font-family: var(--mono); font-size: 0.82rem; line-height: 1.6;
+      padding: 18px 20px; overflow-y: auto; white-space: pre-wrap;
+      font-family: var(--mono); font-size: 0.81rem; line-height: 1.6;
     }
-    #modal-close { position: absolute; top: 12px; right: 18px; background: none; color: var(--text-faint); }
+    #modal-close { position: absolute; top: 10px; right: 16px; background: none; color: var(--text-faint); }
 
-    /* flags modal */
     .flag-row {
-      border-bottom: 1px solid var(--panel-border); padding: 14px 0; display: flex;
+      border-bottom: 1px solid var(--border); padding: 14px 0; display: flex;
       flex-direction: column; gap: 8px;
     }
     .flag-row:last-child { border-bottom: none; }
-    .flag-prompt { font-size: 0.9rem; line-height: 1.4; }
+    .flag-prompt { font-size: 0.88rem; line-height: 1.4; font-family: var(--sans); }
     .flag-input-row { display: flex; gap: 8px; align-items: center; }
     .flag-input-row input {
-      flex: 1; background: var(--bg); border: 1px solid var(--panel-border); border-radius: 7px;
-      padding: 8px 10px; color: var(--text); font-family: inherit; font-size: 0.85rem;
+      flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+      padding: 8px 10px; color: var(--text); font-family: var(--sans); font-size: 0.84rem;
     }
     .flag-input-row input.correct { border-color: var(--good); }
-    .flag-status { font-size: 1rem; width: 22px; text-align: center; }
+    .flag-status { font-size: 1rem; width: 20px; text-align: center; }
     .flag-status.correct { color: var(--good); }
     .flag-status.wrong { color: var(--bad); }
-    .flag-hint { font-size: 0.76rem; color: var(--text-faint); }
+    .flag-hint { font-size: 0.76rem; color: var(--text-faint); font-family: var(--sans); }
     .flag-hint button.link { color: var(--text-faint); text-decoration: underline; }
   </style>
 </head>
 <body>
   <header>
     <div class="brand">
-      <span class="mark">OT<span>RANGE</span></span>
-      <span class="tagline">Control Panel</span>
+      <svg width="24" height="24" viewBox="0 0 28 28">
+        <polygon points="14,2 24,8 24,20 14,26 4,20 4,8" fill="none" stroke="var(--accent)" stroke-width="2"/>
+        <circle cx="14" cy="14" r="3.2" fill="var(--accent)"/>
+      </svg>
+      <span class="wordmark">OT_RANGE</span>
+      <span class="tagline">control panel</span>
     </div>
     <div class="spacer"></div>
-    <div class="flags-chip"><span>🏁</span><span><span class="fill" id="flags-total">—</span></span></div>
+    <div class="flags-chip">🏁 <b id="flags-total">— / —</b></div>
   </header>
 
   <main>
     <div class="security-note">
       Simulated environment — see
       <a href="https://github.com/Kahler2315/ot-range/blob/master/SECURITY.md" target="_blank">SECURITY.md</a>.
-      Every action here runs a command already documented in the README — nothing hidden.
+      Every action here runs a command already documented in the README.
     </div>
 
-    <section>
-      <div class="eyebrow">Stack</div>
-      <div class="panel toolbar">
-        <button class="btn-primary" id="btn-up">Bring stack up</button>
-        <button class="btn-warn" id="btn-reset">Reset (wipe state)</button>
-        <button class="btn-danger" id="btn-down">Tear down</button>
-        <button class="btn-ghost" id="btn-refresh">Refresh status</button>
-        <span class="busy-note" id="busy-note">A command is already running — see the console below.</span>
+    <div class="control-strip">
+      <div class="btn-row">
+        <button class="btn-primary" id="btn-up">Bring up</button>
+        <button class="btn-warn" id="btn-reset">Reset</button>
+        <button class="btn-danger" id="btn-down">Down</button>
+        <button class="btn-ghost" id="btn-refresh">↻</button>
       </div>
-    </section>
+      <span class="busy-note" id="busy-note">running — see console ↓</span>
+      <div class="strip-sep"></div>
+      <div class="status-groups" id="status-groups">
+        <span class="status-empty">loading…</span>
+      </div>
+    </div>
 
-    <section>
-      <div class="eyebrow">Status</div>
-      <div class="panel">
-        <div class="status-grid" id="status-grid">
-          <div class="status-item"><span class="dot"></span><span>Loading…</span></div>
+    <div class="eyebrow">Scenarios</div>
+    <div class="scenario-list">
+      {% for s in scenarios %}
+      <div class="scenario-row" data-scenario="{{ s.id }}">
+        <div class="scenario-row-head" data-toggle="{{ s.id }}">
+          <span class="chevron">▸</span>
+          <span class="sid">{{ s.id }}</span>
+          <span class="stitle">{{ s.title }}</span>
+          <span class="row-hook">{{ s.hook }}</span>
+          <span class="row-flags" data-flag-count="{{ s.id }}">—</span>
         </div>
-      </div>
-    </section>
-
-    <section>
-      <div class="eyebrow">Scenarios</div>
-      <div class="scenario-grid">
-        {% for s in scenarios %}
-        <div class="scenario-card" data-scenario="{{ s.id }}" style="--accent-color: {{ s.color }}">
-          <div class="top-row">
-            <span class="sid">{{ s.id }}</span>
-            <span class="flag-count" data-flag-count="{{ s.id }}">flags —</span>
-          </div>
-          <h3>{{ s.title }}</h3>
-          <div class="hook">{{ s.hook }}</div>
+        <div class="scenario-row-body" id="body-{{ s.id }}" hidden>
+          <div class="meta">{{ s.hook }}</div>
           <div class="meta"><b>Impact:</b> {{ s.impact }}</div>
           <div class="meta"><b>Caught by:</b> {{ s.caught_by }}</div>
           <div class="row">
@@ -254,14 +276,14 @@
             <button class="link flags-link" data-scenario="{{ s.id }}">🏁 Flags</button>
           </div>
         </div>
-        {% endfor %}
       </div>
-    </section>
+      {% endfor %}
+    </div>
   </main>
 
   <div id="modal-overlay">
     <div id="modal-box" style="position: relative;">
-      <button id="modal-close">✕ close</button>
+      <button id="modal-close">✕</button>
       <div id="modal-title"></div>
       <div id="modal-body"></div>
     </div>
@@ -271,7 +293,7 @@
     <div id="console-header">
       <span id="console-title">running…</span>
       <span class="status-badge running" id="console-badge">running</span>
-      <button id="console-close">✕ close</button>
+      <button id="console-close">✕</button>
     </div>
     <div id="console-body"></div>
   </div>

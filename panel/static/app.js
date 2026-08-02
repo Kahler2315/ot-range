@@ -59,30 +59,49 @@ async function loadFlags() {
   }
 }
 
-function renderStatus(data) {
-  const grid = document.getElementById("status-grid");
-  grid.innerHTML = "";
+const SHORT_LABELS = {
+  "ot-range-process-sim-1": "sim",
+  "ot-range-openplc-1": "plc",
+  "ot-range-hmi-1": "hmi",
+  "ot-range-historian-1": "hist",
+  "ot-range-postgres-1": "pg",
+  "ot-range-grafana-1": "graf",
+  "ot-range-router-1": "rtr",
+};
 
-  const addItem = (ok, label, linkUrl) => {
-    const div = document.createElement("div");
-    div.className = "status-item";
-    const dot = `<span class="dot ${ok ? "ok" : "bad"}"></span>`;
-    const link = linkUrl ? `<a href="${linkUrl}" target="_blank">open →</a>` : "";
-    div.innerHTML = `${dot}<span class="label">${label}</span>${link}`;
-    grid.appendChild(div);
-  };
+function chip(ok, label) {
+  return `<span class="chip"><span class="dot ${ok ? "ok" : "bad"}"></span>${label}</span>`;
+}
+
+function linkChip(ok, label, url) {
+  return `<span class="chip"><span class="dot ${ok ? "ok" : "bad"}"></span><a href="${url}" target="_blank">${label} ↗</a></span>`;
+}
+
+function renderStatus(data) {
+  const el = document.getElementById("status-groups");
 
   if (!data.docker.any_present) {
-    addItem(false, "Docker stack not running — click “Bring stack up”");
+    el.innerHTML = '<span class="status-empty">Stack not running — click "Bring up"</span>';
   } else {
-    for (const c of data.docker.containers) {
-      addItem(c.ok, STATUS_LABELS[c.name] || c.name);
-    }
-    addItem(data.docker.ports.modbus_openplc, "Modbus (OpenPLC) :502");
-    addItem(data.docker.ports.modbus_sim, "Modbus (process-sim) :5502");
-    addItem(data.docker.ports.openplc_web, "OpenPLC web UI", "http://localhost:8080");
-    addItem(data.docker.ports.hmi, "HMI", "http://localhost:8090");
-    addItem(data.docker.ports.grafana, "Grafana", "http://localhost:3000");
+    const containers = data.docker.containers
+      .map((c) => chip(c.ok, SHORT_LABELS[c.name] || c.name))
+      .join("");
+    const ports = [
+      chip(data.docker.ports.modbus_openplc, "502"),
+      chip(data.docker.ports.modbus_sim, "5502"),
+    ].join("");
+    const links = [
+      linkChip(data.docker.ports.openplc_web, "OpenPLC", "http://localhost:8080"),
+      linkChip(data.docker.ports.hmi, "HMI", "http://localhost:8090"),
+      linkChip(data.docker.ports.grafana, "Grafana", "http://localhost:3000"),
+    ].join("");
+    el.innerHTML = `
+      <div class="status-group">${containers}</div>
+      <div class="strip-sep"></div>
+      <div class="status-group">${ports}</div>
+      <div class="strip-sep"></div>
+      <div class="status-group">${links}</div>
+    `;
   }
 
   const busy = data.busy;
@@ -284,10 +303,24 @@ function wireFlagsLinks() {
   }
 }
 
+function wireAccordion() {
+  for (const head of document.querySelectorAll(".scenario-row-head")) {
+    head.addEventListener("click", () => {
+      const scenario = head.dataset.toggle;
+      const row = head.closest(".scenario-row");
+      const body = document.getElementById(`body-${scenario}`);
+      const isOpen = !body.hidden;
+      body.hidden = isOpen;
+      row.classList.toggle("open", !isOpen);
+    });
+  }
+}
+
 wireStackButtons();
 wireScenarioButtons();
 wireDocLinks();
 wireFlagsLinks();
+wireAccordion();
 refreshStatus();
 loadFlags();
 setInterval(refreshStatus, 4000);

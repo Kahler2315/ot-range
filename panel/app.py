@@ -160,17 +160,6 @@ def collect_status() -> dict:
 # --- routes ---
 
 
-# Per-scenario accent color: not arbitrary decoration — sky for recon
-# (informational), orange for a destructive-but-caught command, gold
-# for the flagship, red for S06's deliberately undetected gap.
-SCENARIO_COLORS = {
-    "S01": "#38bdf8",
-    "S03": "#fb923c",
-    "S05": "#fbbf24",
-    "S06": "#f87171",
-}
-
-
 @app.route("/")
 def index():
     scenarios = [
@@ -180,7 +169,6 @@ def index():
             "hook": s.hook,
             "impact": s.impact,
             "caught_by": s.caught_by,
-            "color": SCENARIO_COLORS.get(s.id, "#22d3ee"),
             "modes": [
                 {"label": m.label, "requires_docker": m.requires_docker_stack} for m in s.modes
             ],
