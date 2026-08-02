@@ -475,11 +475,7 @@ function openDrawer(scenarioId) {
   overlay.hidden = false;
   overlay._releaseFocus = trapFocus(document.getElementById("scenario-drawer"));
 
-  const mapSelect = document.getElementById("map-scenario-select");
-  if (mapSelect) {
-    mapSelect.value = scenarioId;
-    setMapOverlay(scenarioId);
-  }
+  tryShowMapOverlay(scenarioId);
 }
 
 function refreshDrawerFlags() {
@@ -489,6 +485,10 @@ function refreshDrawerFlags() {
     renderLifecycleBadges(FLAGS);
     renderProgressSection(SCENARIOS, FLAGS, exportOneScenarioReport);
     updateDrawerLifecycleBadge(currentDrawerScenario);
+    // Re-check the map overlay gate — it may have just unlocked.
+    if (document.getElementById("map-scenario-select").value === currentDrawerScenario) {
+      tryShowMapOverlay(currentDrawerScenario);
+    }
   });
 }
 
@@ -503,7 +503,10 @@ function renderDrawerWorkspaceLinks(meta) {
   container.innerHTML =
     links.map((l) => `<a class="workspace-link" href="${l.url}" target="_blank" rel="noopener">${l.label}</a>`).join("") +
     '<a class="workspace-link" href="#network-map">Network map</a>' +
-    '<a class="workspace-link" href="#console-section">Console</a>';
+    '<button class="workspace-link" id="drawer-console-link" type="button">Console</button>';
+  document.getElementById("drawer-console-link")?.addEventListener("click", () => {
+    document.getElementById("nav-console-link").click();
+  });
 }
 
 function renderDrawerPrereq(meta) {
@@ -589,8 +592,46 @@ async function loadTopology() {
   initNetworkMap(TOPOLOGY);
 }
 
+// The attack-path overlay (which edges are the attack path, which
+// nodes are "affected"/"detection points", S05's ground-truth-vs-
+// spoofed labels, S06's monitoring-gap annotation) visually answers
+// several flags outright — it's spoiler content, not neutral
+// infrastructure diagramming. Gated the same way the answer key is:
+// available once the attempt is genuinely done (completed, completed
+// with assistance, or the solution was explicitly revealed) or in
+// guided mode, where more scaffolding up front is the point. The base
+// topology (zones, services, ports, health) stays visible always —
+// that's real environment awareness, not a spoiler.
+function isOverlayUnlocked(scenarioId) {
+  const state = TrainingStore.getScenario(scenarioId);
+  if (state.mode === "guided") return true;
+  return ["completed", "completed_with_assistance", "solution_revealed"].includes(state.status);
+}
+
+function tryShowMapOverlay(scenarioId) {
+  const select = document.getElementById("map-scenario-select");
+  const note = document.getElementById("map-overlay-locked-note");
+  if (!scenarioId) {
+    select.value = "";
+    note.hidden = true;
+    setMapOverlay(null);
+    return;
+  }
+  if (isOverlayUnlocked(scenarioId)) {
+    select.value = scenarioId;
+    note.hidden = true;
+    setMapOverlay(scenarioId);
+  } else {
+    select.value = "";
+    note.hidden = false;
+    note.textContent =
+      `${scenarioId}'s attack-path overlay is hidden until that attempt is complete or its solution is revealed — showing it now would hand you the investigation. Open the scenario and investigate normally; the overlay unlocks automatically once you're done, or switch to guided mode for more scaffolding up front.`;
+    setMapOverlay(null);
+  }
+}
+
 function wireMapControls() {
-  document.getElementById("map-scenario-select").addEventListener("change", (ev) => setMapOverlay(ev.target.value));
+  document.getElementById("map-scenario-select").addEventListener("change", (ev) => tryShowMapOverlay(ev.target.value));
   document.getElementById("map-toggle-ports").addEventListener("click", (ev) => {
     const showing = toggleMapPorts();
     ev.target.textContent = `Ports/protocols: ${showing ? "on" : "off"}`;
@@ -602,13 +643,21 @@ function wireMapControls() {
 // ==================== sidebar nav ====================
 
 function wireSidebarNav() {
-  const links = [...document.querySelectorAll(".nav-link")];
-  const sections = links.map((l) => document.getElementById(l.dataset.nav)).filter(Boolean);
+  // "Console" isn't a scrollable page section — it's a fixed bottom
+  // drawer — so it can't be tracked by the same IntersectionObserver
+  // as the other five. It used to point at a nonexistent
+  // #console-section anchor, which meant it could never highlight or
+  // navigate anywhere; it now opens the drawer directly instead.
+  const consoleLink = document.getElementById("nav-console-link");
+  const scrollLinks = [...document.querySelectorAll(".nav-link")].filter((l) => l !== consoleLink);
+  const sections = scrollLinks.map((l) => document.getElementById(l.dataset.nav)).filter(Boolean);
+
   const observer = new IntersectionObserver(
     (entries) => {
       for (const entry of entries) {
         if (entry.isIntersecting) {
-          links.forEach((l) => l.classList.toggle("active", l.dataset.nav === entry.target.id));
+          scrollLinks.forEach((l) => l.classList.toggle("active", l.dataset.nav === entry.target.id));
+          consoleLink.classList.remove("active");
         }
       }
     },
@@ -616,10 +665,20 @@ function wireSidebarNav() {
   );
   sections.forEach((s) => observer.observe(s));
 
+  consoleLink.addEventListener("click", (ev) => {
+    ev.preventDefault();
+    const wrap = document.getElementById("console-wrap");
+    wrap.hidden = false;
+    wrap.classList.remove("collapsed");
+    scrollLinks.forEach((l) => l.classList.remove("active"));
+    consoleLink.classList.add("active");
+    document.querySelector(".sidebar").classList.remove("open");
+  });
+
   document.getElementById("mobile-menu-btn")?.addEventListener("click", () => {
     document.querySelector(".sidebar").classList.toggle("open");
   });
-  links.forEach((l) =>
+  scrollLinks.forEach((l) =>
     l.addEventListener("click", () => document.querySelector(".sidebar").classList.remove("open"))
   );
 }

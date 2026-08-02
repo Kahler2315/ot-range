@@ -23,7 +23,7 @@
         <li><a href="#plant-services" class="nav-link" data-nav="plant-services">Plant Services</a></li>
         <li><a href="#progress" class="nav-link" data-nav="progress">Investigation Progress</a></li>
         <li><a href="#network-map" class="nav-link" data-nav="network-map">Network Map</a></li>
-        <li><a href="#console-section" class="nav-link" data-nav="console-section">Console</a></li>
+        <li><a href="#" class="nav-link" id="nav-console-link" data-nav="console">Console</a></li>
       </ul>
       <div class="sidebar-footer">
         <a href="https://github.com/Kahler2315/ot-range/blob/master/SECURITY.md" target="_blank" rel="noopener">SECURITY.md</a>
@@ -183,6 +183,7 @@
             <button class="btn-ghost" id="map-reset-view">Reset view</button>
             <button class="btn-ghost" id="map-refresh-health">↻ Health</button>
           </div>
+          <p class="prereq-banner" id="map-overlay-locked-note" hidden></p>
           <div class="map-canvas-wrap" id="map-canvas-wrap">
             <svg id="map-svg" viewBox="0 0 900 460" role="group" aria-label="Range network topology" tabindex="0"></svg>
           </div>
