@@ -101,3 +101,13 @@ limitation somebody else discovers the hard way.
     actual lesson.
 13. **S02 (default creds / project exfiltration) is not built at all.**
     Blocked on the same missing HTTP-layer sensor as S06, above.
+14. **The Windows installer (`installer/ot-range.iss`) is compiled and
+    validated on GitHub's real `windows-latest` runners in CI
+    (`.github/workflows/windows-installer.yml`), but not run
+    end-to-end on an actual Windows machine with WSL2 + Docker Desktop
+    installed** — that combination isn't available in this project's
+    development environment, so "the .iss script compiles and produces
+    a valid Setup.exe" is verified, but "the shortcut it creates
+    actually launches WSL, clones the repo, and opens a browser on a
+    real PC" is not. See the README's Windows section and the .iss
+    file's own header for what's checked vs. assumed.

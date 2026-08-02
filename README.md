@@ -73,17 +73,37 @@ check, not just a pass/fail on running the attack script. Answers are
 checked server-side, so they're never sitting in the page source; the
 header tracks your running total. See [`scenarios/flags.py`](scenarios/flags.py).
 
-**Windows 10/11:** install [Docker Desktop](https://www.docker.com/products/docker-desktop/)
-with WSL2 enabled, and a WSL2 distro (Ubuntu is the default) — Docker
-Desktop needs this on Windows anyway, and this range's `router`
-container needs raw packet capture, which is a Linux-container thing
-regardless of host OS. Clone the repo *inside* the WSL filesystem (not
-`/mnt/c/...`) and run `./start-panel.sh` from the WSL shell — from
-that point on it behaves exactly like Linux, and the panel opens in
-your normal Windows browser via WSL's interop. `start-panel.bat` is a
-best-effort double-click wrapper for Explorer's WSL view
-(`\\wsl.localhost\<distro>\...`); the primary, fully-tested path is the
-WSL shell.
+**Windows 10/11 — installer (recommended for schools/companies):**
+prerequisite either way is [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+with WSL2 enabled — Docker Desktop needs this on Windows regardless,
+and this range's `router` container needs raw packet capture, a
+Linux-container thing no matter how it's packaged. Given that,
+download **`OT-Range-Setup.exe`** from the
+[latest `windows-installer` run's artifacts](https://github.com/Kahler2315/ot-range/actions/workflows/windows-installer.yml)
+(no Releases page yet — grab it from the most recent successful run)
+and run it. No admin rights needed. It adds a **Start Menu and Desktop
+shortcut** that clones/updates the repo inside WSL and launches the
+control panel automatically — double-click the icon, the browser opens,
+that's it. Source: [`installer/ot-range.iss`](installer/ot-range.iss)
+(built with [Inno Setup](https://jrsoftware.org/isinfo.php)).
+
+Two things to know going in: it's unsigned (no paid code-signing
+certificate), so Windows SmartScreen will show "Windows protected your
+PC" the first time — click **More info → Run anyway**, which is normal
+for a small open-source tool, not a sign anything's wrong. And the
+installer itself is compiled and validated on GitHub's real Windows
+runners in CI, but hasn't been run end-to-end on an actual Windows
+machine with WSL2 + Docker Desktop installed — that combination isn't
+available in this project's own development environment. If the
+shortcut doesn't behave as documented, please open an issue.
+
+**Windows 10/11 — manual path:** install WSL2 + Docker Desktop as
+above, clone the repo *inside* the WSL filesystem (not `/mnt/c/...`),
+and run `./start-panel.sh` from the WSL shell — from that point on it
+behaves exactly like Linux, and the panel opens in your normal Windows
+browser via WSL's interop. This is what the installer's shortcut does
+for you automatically; use this path if you'd rather not run an
+unsigned .exe, or want more control over where things land.
 
 **Linux:** first run also adds an "OT Range Control Panel" entry to
 your desktop's application menu, with this clone's actual path baked
