@@ -644,43 +644,91 @@ function wireMapControls() {
 
 function wireSidebarNav() {
   // "Console" isn't a scrollable page section — it's a fixed bottom
-  // drawer — so it can't be tracked by the same IntersectionObserver
-  // as the other five. It used to point at a nonexistent
-  // #console-section anchor, which meant it could never highlight or
-  // navigate anywhere; it now opens the drawer directly instead.
+  // drawer — so it can't be tracked the same way as the other five.
+  // It used to point at a nonexistent #console-section anchor, which
+  // meant it could never highlight or navigate anywhere; it now opens
+  // the drawer directly instead.
   const consoleLink = document.getElementById("nav-console-link");
-  const scrollLinks = [...document.querySelectorAll(".nav-link")].filter((l) => l !== consoleLink);
-  const sections = scrollLinks.map((l) => document.getElementById(l.dataset.nav)).filter(Boolean);
+  const allLinks = [...document.querySelectorAll(".nav-link")];
+  const scrollLinks = allLinks.filter((l) => l !== consoleLink);
+  const sections = scrollLinks
+    .map((l) => ({ link: l, el: document.getElementById(l.dataset.nav) }))
+    .filter((s) => s.el);
 
-  const observer = new IntersectionObserver(
-    (entries) => {
-      for (const entry of entries) {
-        if (entry.isIntersecting) {
-          scrollLinks.forEach((l) => l.classList.toggle("active", l.dataset.nav === entry.target.id));
-          consoleLink.classList.remove("active");
-        }
+  function setActive(link) {
+    allLinks.forEach((l) => l.classList.toggle("active", l === link));
+  }
+
+  // Deliberately not IntersectionObserver with a thin rootMargin band:
+  // that only reliably fires for sections taller than the band, which
+  // varies by viewport size — Plant Services (a handful of short
+  // service rows) could fall entirely outside the band on some
+  // screens. Find the last section whose top has crossed a fixed
+  // reference line below the sticky header instead — works regardless
+  // of a section's height.
+  const REFERENCE_OFFSET = 84;
+
+  function sectionForScrollPosition() {
+    // Bottom-of-page special case: the last section's top can only
+    // reach the reference line if there's enough scrollable page left
+    // below it. If the page is short, max scroll stops short and its
+    // top never crosses the line, so it could never highlight at all.
+    const atBottom = window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 4;
+    if (atBottom) return sections[sections.length - 1];
+    let current = sections[0];
+    for (const s of sections) {
+      if (s.el.getBoundingClientRect().top - REFERENCE_OFFSET <= 0) current = s;
+    }
+    return current;
+  }
+
+  // Clicking a link sets the active state directly and immediately —
+  // no ambiguity, no race with the scroll-driven fallback below (which
+  // is for organic mouse-wheel scrolling only, and is suppressed for
+  // a moment after a click so it can't stomp on a click that hasn't
+  // finished scrolling yet).
+  let suppressScrollUpdates = false;
+  scrollLinks.forEach((link) => {
+    link.addEventListener("click", (ev) => {
+      ev.preventDefault();
+      const target = document.getElementById(link.dataset.nav);
+      if (!target) return;
+      setActive(link);
+      suppressScrollUpdates = true;
+      target.scrollIntoView({ behavior: "auto", block: "start" });
+      document.querySelector(".sidebar").classList.remove("open");
+      window.setTimeout(() => {
+        suppressScrollUpdates = false;
+      }, 350);
+    });
+  });
+
+  let ticking = false;
+  window.addEventListener("scroll", () => {
+    if (ticking) return;
+    ticking = true;
+    requestAnimationFrame(() => {
+      if (!suppressScrollUpdates) {
+        const current = sectionForScrollPosition();
+        if (current) setActive(current.link);
       }
-    },
-    { rootMargin: "-40% 0px -55% 0px" }
-  );
-  sections.forEach((s) => observer.observe(s));
+      ticking = false;
+    });
+  });
+  setActive(sectionForScrollPosition()?.link);
 
   consoleLink.addEventListener("click", (ev) => {
     ev.preventDefault();
     const wrap = document.getElementById("console-wrap");
     wrap.hidden = false;
     wrap.classList.remove("collapsed");
-    scrollLinks.forEach((l) => l.classList.remove("active"));
-    consoleLink.classList.add("active");
+    setActive(consoleLink);
     document.querySelector(".sidebar").classList.remove("open");
   });
 
   document.getElementById("mobile-menu-btn")?.addEventListener("click", () => {
     document.querySelector(".sidebar").classList.toggle("open");
   });
-  scrollLinks.forEach((l) =>
-    l.addEventListener("click", () => document.querySelector(".sidebar").classList.remove("open"))
-  );
 }
 
 // ==================== init ====================
