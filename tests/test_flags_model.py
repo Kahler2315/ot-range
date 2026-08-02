@@ -5,7 +5,7 @@ in a well-formed way."""
 
 from __future__ import annotations
 
-from scenarios.catalog import LEARNING_OBJECTIVES, SCENARIOS_BY_ID
+from scenarios.catalog import LEARNING_OBJECTIVES, SCENARIOS, SCENARIOS_BY_ID
 from scenarios.flags import FLAGS_BY_SCENARIO, Flag, check, normalize
 from scenarios.scoring import hint_cost
 
@@ -74,3 +74,25 @@ def test_flag_answers_are_never_equal_to_their_own_hints():
                     if len(accepted_norm) <= 2:
                         continue  # too short to meaningfully collide-check
                     assert accepted_norm not in hint_norm, (flag.id, accepted)
+
+
+def test_scenarios_have_phase_2a_training_metadata():
+    for scenario in SCENARIOS:
+        assert scenario.difficulty in {"Beginner", "Intermediate", "Advanced"}
+        assert scenario.estimated_duration
+        assert scenario.prerequisites
+        assert scenario.primary_skills
+        assert scenario.evidence_sources
+        assert scenario.recommended_training_mode
+        assert scenario.process_impact_rating
+        assert scenario.detection_coverage_state
+
+
+def test_execution_modes_use_friendly_labels_and_keep_fixed_technical_commands():
+    friendly_labels = {"Quick Simulation", "Full Monitored Network", "Live PLC Investigation"}
+    for scenario in SCENARIOS:
+        for mode in scenario.modes:
+            assert mode.label in friendly_labels
+            assert mode.description
+            assert isinstance(mode.command, list)
+            assert mode.command

@@ -7,18 +7,12 @@
 
 import {
   TrainingStore,
-  buildCompletionReport,
-  buildCourseReport,
   confirmResetAttempt,
   confirmRevealSolution,
-  ensureAttemptStarted,
   exportJSON,
-  initInstructorPanel,
   isSolutionDoc,
   lifecycleLabel,
-  markDocOpened,
   openPrintableReport,
-  recomputeStatus,
   renderFlagsSection,
   renderLifecycleBadges,
   renderModeSelector,
@@ -28,7 +22,8 @@ import {
   trapFocus,
   wireNotesField,
 } from "./training.js";
-import { initNetworkMap, resetMapView, setMapOverlay, toggleMapPorts, updateMapHealth } from "./networkmap.js";
+import { apiRequest } from "./api.js";
+import { initNetworkMap, resetMapView, setMapOverlay, toggleMapPorts, updateMapHealth } from "./networkmap.js?v=phase2a-map-dark-1";
 
 const SCENARIOS = JSON.parse(document.getElementById("scenarios-data").textContent);
 const SCENARIOS_BY_ID = Object.fromEntries(SCENARIOS.map((s) => [s.id, s]));
@@ -310,7 +305,7 @@ function wireConsole() {
 
 // ==================== document viewer modal ====================
 
-function openDocModal(scenarioId, docKey) {
+async function openDocModal(scenarioId, docKey) {
   document.getElementById("modal-title").textContent = DOC_LABELS[docKey];
   document.getElementById("modal-subtitle").textContent = `${scenarioId} — ${SCENARIOS_BY_ID[scenarioId].title}`;
   const body = document.getElementById("modal-body");
@@ -319,15 +314,16 @@ function openDocModal(scenarioId, docKey) {
   overlay.hidden = false;
   overlay._releaseFocus = trapFocus(document.getElementById("modal-box"));
 
-  fetch(`/api/docs/${scenarioId}/${docKey}`)
-    .then((r) => (r.ok ? r.text() : Promise.resolve("Not found.")))
-    .then((text) => {
-      body.textContent = text;
-    });
+  try {
+    body.textContent = await apiRequest(`/api/docs/${scenarioId}/${docKey}`);
+    return true;
+  } catch (error) {
+    body.textContent = error.message;
+    return false;
+  }
 }
 
 async function tryOpenDoc(scenarioId, docKey) {
-  ensureAttemptStarted(scenarioId);
   if (isSolutionDoc(docKey)) {
     const state = TrainingStore.getScenario(scenarioId);
     if (!state.solutionLocked && state.mode !== "guided") {
@@ -335,13 +331,13 @@ async function tryOpenDoc(scenarioId, docKey) {
       if (!ok) return;
     }
   }
-  markDocOpened(scenarioId, docKey);
-  recomputeStatus(scenarioId, FLAGS[scenarioId] || []);
+  const opened = await openDocModal(scenarioId, docKey);
+  if (!opened) return;
+  await TrainingStore.refreshScenario(scenarioId);
   renderLifecycleBadges(FLAGS);
   renderProgressSection(SCENARIOS, FLAGS, exportOneScenarioReport);
   updateDrawerLifecycleBadge(scenarioId);
   if (currentDrawerScenario === scenarioId) refreshDrawerFlags();
-  openDocModal(scenarioId, docKey);
 }
 
 function wireModalClose() {
@@ -373,6 +369,10 @@ function updateDrawerLifecycleBadge(scenarioId) {
 }
 
 function openDrawer(scenarioId) {
+  if (TrainingStore.settings.scenarioAvailability?.[scenarioId] === false) {
+    void showAlert("Scenario unavailable", "This scenario is disabled by the instructor's current training policies.");
+    return;
+  }
   currentDrawerScenario = scenarioId;
   const meta = SCENARIOS_BY_ID[scenarioId];
 
@@ -387,7 +387,16 @@ function openDrawer(scenarioId) {
       <h4>Threat summary</h4>
       <p class="meta-line"><b>Impact:</b> ${meta.impact}</p>
       <p class="meta-line"><b>Caught by:</b> ${meta.caught_by}</p>
-      <span class="severity severity-${meta.severity}">${meta.severity}</span>
+      <dl class="drawer-metadata scenario-metadata">
+        <div><dt>Difficulty</dt><dd>${meta.difficulty}</dd></div>
+        <div><dt>Estimated time</dt><dd>${meta.estimated_duration}</dd></div>
+        <div><dt>Prerequisite knowledge</dt><dd>${meta.prerequisites.join("; ")}</dd></div>
+        <div><dt>Primary skills</dt><dd>${meta.primary_skills.join("; ")}</dd></div>
+        <div><dt>Evidence sources</dt><dd>${meta.evidence_sources.join("; ")}</dd></div>
+        <div><dt>Recommended mode</dt><dd>${meta.recommended_training_mode}</dd></div>
+        <div><dt>Process impact</dt><dd>${meta.process_impact_rating}</dd></div>
+        <div><dt>Detection coverage</dt><dd>${meta.detection_coverage_state}</dd></div>
+      </dl>
       ${meta.severity === "critical" ? '<div class="warning-banner">This scenario causes real simulated process damage (tank overflow, pump damage) when run. Simulated environment only — see SECURITY.md.</div>' : ""}
     </div>
 
@@ -406,6 +415,8 @@ function openDrawer(scenarioId) {
         </select>
         <button class="btn-primary run-btn" id="drawer-run-btn">Run</button>
       </div>
+      <p class="meta-line" id="execution-mode-description"></p>
+      <details class="technical-details"><summary>Technical details</summary><code id="execution-mode-command"></code></details>
       <div id="drawer-prereq"></div>
     </div>
 
@@ -413,10 +424,11 @@ function openDrawer(scenarioId) {
       <h4>Documentation</h4>
       <div class="doc-tabs">
         <button class="doc-tab" data-doc="briefing">Briefing</button>
-        <button class="doc-tab" data-doc="detection">Detection</button>
-        <button class="doc-tab" data-doc="expected-impact">Expected impact</button>
-        <button class="doc-tab solution-doc" data-doc="answer-key">Answer key 🔒</button>
+        <button class="doc-tab" data-doc="detection" ${TrainingStore.settings.walkthroughEnabled ? "" : "disabled"}>Detection</button>
+        <button class="doc-tab" data-doc="expected-impact" ${TrainingStore.settings.walkthroughEnabled ? "" : "disabled"}>Expected impact</button>
+        <button class="doc-tab solution-doc" data-doc="answer-key" ${TrainingStore.settings.answerKeyEnabled ? "" : "disabled"}>Answer key 🔒</button>
       </div>
+      ${!TrainingStore.settings.walkthroughEnabled || !TrainingStore.settings.answerKeyEnabled ? '<p class="flag-evidence">Some solution resources are unavailable under current instructor policies.</p>' : ""}
     </div>
 
     <div class="drawer-section">
@@ -444,6 +456,7 @@ function openDrawer(scenarioId) {
   refreshDrawerFlags();
   renderDrawerWorkspaceLinks(meta);
   renderDrawerPrereq(meta);
+  renderExecutionModeDetails(meta);
   updateDrawerLifecycleBadge(scenarioId);
 
   content.querySelectorAll(".doc-tab").forEach((btn) => {
@@ -452,17 +465,24 @@ function openDrawer(scenarioId) {
 
   document.getElementById("drawer-run-btn").addEventListener("click", async () => {
     const modeIndex = Number.parseInt(document.getElementById("drawer-mode-select").value, 10);
-    ensureAttemptStarted(scenarioId);
-    renderLifecycleBadges(FLAGS);
-    updateDrawerLifecycleBadge(scenarioId);
-    const data = await postJSON("/api/run", { scenario: scenarioId, mode_index: modeIndex });
-    if (data) streamJob(data.job_id, `${scenarioId}: ${meta.modes[modeIndex].label}`);
+    const trainingMode = TrainingStore.getScenario(scenarioId).mode;
+    const data = await postJSON("/api/run", {
+      scenario: scenarioId,
+      mode_index: modeIndex,
+      training_mode: trainingMode,
+    });
+    if (data) {
+      await TrainingStore.refreshScenario(scenarioId);
+      renderLifecycleBadges(FLAGS);
+      updateDrawerLifecycleBadge(scenarioId);
+      streamJob(data.job_id, `${scenarioId}: ${meta.modes[modeIndex].label}`);
+    }
   });
 
   document.getElementById("drawer-reset-btn").addEventListener("click", async () => {
     const ok = await confirmResetAttempt();
     if (!ok) return;
-    TrainingStore.resetScenario(scenarioId);
+    await TrainingStore.resetScenario(scenarioId);
     renderLifecycleBadges(FLAGS);
     renderProgressSection(SCENARIOS, FLAGS, exportOneScenarioReport);
     renderModeSelector(document.getElementById("drawer-mode-section"), scenarioId, refreshDrawerFlags);
@@ -476,6 +496,17 @@ function openDrawer(scenarioId) {
   overlay._releaseFocus = trapFocus(document.getElementById("scenario-drawer"));
 
   tryShowMapOverlay(scenarioId);
+}
+
+function renderExecutionModeDetails(meta) {
+  const select = document.getElementById("drawer-mode-select");
+  const update = () => {
+    const mode = meta.modes[Number.parseInt(select.value, 10)];
+    document.getElementById("execution-mode-description").textContent = mode.description;
+    document.getElementById("execution-mode-command").textContent = mode.technical_command;
+  };
+  select.addEventListener("change", update);
+  update();
 }
 
 function refreshDrawerFlags() {
@@ -560,6 +591,18 @@ function wireScenarioCards() {
   });
 }
 
+function renderScenarioAvailability() {
+  const availability = TrainingStore.settings.scenarioAvailability || {};
+  document.querySelectorAll(".scenario-card").forEach((card) => {
+    const enabled = availability[card.dataset.scenario] !== false;
+    card.classList.toggle("scenario-unavailable", !enabled);
+    card.setAttribute("aria-disabled", String(!enabled));
+    const button = card.querySelector(".open-scenario-btn");
+    button.disabled = !enabled;
+    if (!enabled) button.textContent = "Unavailable by instructor policy";
+  });
+}
+
 // ==================== flags data + progress/reports ====================
 
 async function loadFlags() {
@@ -569,18 +612,22 @@ async function loadFlags() {
   renderProgressSection(SCENARIOS, FLAGS, exportOneScenarioReport);
 }
 
-function exportOneScenarioReport(scenarioId) {
-  const report = buildCompletionReport(scenarioId, SCENARIOS_BY_ID[scenarioId], FLAGS[scenarioId] || []);
-  exportJSON(report, `ot-range-${scenarioId}-report.json`);
+async function exportOneScenarioReport(scenarioId) {
+  const report = await TrainingStore.exportAll();
+  const scenario = report.scenarios.find((item) => item.scenario === scenarioId);
+  exportJSON(
+    { profile: report.profile, disclaimer: report.disclaimer, scenario },
+    `ot-range-${scenarioId}-report.json`
+  );
 }
 
 function wireProgressExports() {
-  document.getElementById("export-course-json").addEventListener("click", () => {
-    exportJSON(buildCourseReport(SCENARIOS, FLAGS), "ot-range-course-report.json");
+  document.getElementById("export-course-json").addEventListener("click", async () => {
+    exportJSON(await TrainingStore.exportAll(), "ot-range-course-report.json");
   });
-  document.getElementById("export-course-print").addEventListener("click", () => {
-    const report = buildCourseReport(SCENARIOS, FLAGS);
-    openPrintableReport(report.scenarios, "Cedar Hollow OT Range — Course Progress Report");
+  document.getElementById("export-course-print").addEventListener("click", async () => {
+    const report = await TrainingStore.exportAll();
+    openPrintableReport(report, "Cedar Hollow OT Range — Course Progress Report");
   });
 }
 
@@ -753,6 +800,8 @@ function wireSidebarNav() {
 // ==================== init ====================
 
 async function init() {
+  await TrainingStore.initialize();
+  renderScenarioAvailability();
   wireStackButtons();
   wireConsole();
   wireModalClose();
@@ -761,8 +810,6 @@ async function init() {
   wireProgressExports();
   wireMapControls();
   wireSidebarNav();
-  initInstructorPanel(SCENARIOS, () => window.location.reload());
-
   await Promise.all([loadFlags(), loadTopology()]);
   await refreshStatus();
   setInterval(refreshStatus, 4000);

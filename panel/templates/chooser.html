@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cedar Hollow OT Range — Choose your workspace</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body class="workspace-entry-body">
+  <main class="workspace-entry-shell">
+    <header class="entry-header">
+      <p class="eyebrow">Local OT/ICS training environment</p>
+      <h1>Cedar Hollow OT Range</h1>
+      <h2>Choose your workspace</h2>
+    </header>
+
+    <section class="workspace-choice-grid" aria-label="Workspace choices">
+      <article class="workspace-choice-card student-choice">
+        <span class="choice-kicker">No password required</span>
+        <h3>Student Lab</h3>
+        <p>Start or continue an investigation using a local learner profile.</p>
+        <div id="profile-list" class="profile-list"></div>
+        <p id="profile-empty" class="status-empty">No local learner profiles yet. Create one below.</p>
+        <details class="profile-create-panel" open>
+          <summary>Create local learner profile</summary>
+          <form id="profile-create-form" class="stacked-form">
+            <label>Display name <input name="display_name" required maxlength="120" autocomplete="name"></label>
+            <div class="form-grid">
+              <label>Learner ID <input name="learner_id" maxlength="200"></label>
+              <label>Organization or school <input name="organization" maxlength="200"></label>
+              <label>Course <input name="course" maxlength="200"></label>
+              <label>Section or cohort <input name="section" maxlength="200"></label>
+              <label>Instructor name <input name="instructor_name" maxlength="200"></label>
+            </div>
+            <button class="btn-primary" type="submit">Create profile and enter Student Lab</button>
+          </form>
+        </details>
+      </article>
+
+      <article class="workspace-choice-card instructor-choice">
+        <span class="choice-kicker">Instructor password required</span>
+        <h3>Instructor Console</h3>
+        <p>Configure training policies, manage local learner records, review progress, and control solution access.</p>
+        <a class="btn-primary button-link" href="{{ url_for('instructor_login_page') }}">Open Instructor Console</a>
+      </article>
+    </section>
+
+    <p class="local-data-notice">
+      This installation stores learner profiles and progress locally. Student profiles identify local training records and are not verified online accounts.
+    </p>
+    <p id="chooser-status" class="form-status" role="status"></p>
+  </main>
+  <script type="module" src="{{ url_for('static', filename='profiles.js') }}"></script>
+</body>
+</html>

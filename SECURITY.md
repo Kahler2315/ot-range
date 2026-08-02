@@ -25,6 +25,45 @@ circumvent that guard.
 - If you adapt scenarios here for a class, CTF, or exercise, keep the same
   scope guards and responsible-use framing for your students/participants.
 
+## Local control panel security model
+
+The control panel binds only to `127.0.0.1`. Keep it on loopback: it can
+start and stop the range and launch scenarios. Scenario execution continues
+to use fixed, server-side allowlisted command arrays; the browser cannot
+supply a command, target, file path, or shell fragment.
+
+Learner profiles and training progress are local records, not online user
+accounts. They are stored in the Flask instance database at
+`panel/instance/ot-range.db` by default. The path is deployment-specific,
+excluded from Git, and can be overridden in Flask configuration for tests or
+managed deployments. Existing browser `localStorage` progress is not imported.
+
+There is no default instructor password. First-time setup derives a credential
+with Python's standard-library `hashlib.scrypt`, a unique random salt, and
+stored work parameters. Scrypt was selected so this local phase does not add a
+packaging dependency. Plaintext passwords and attempted passwords are never
+stored or logged.
+
+Instructor authorization uses a cryptographically random opaque cookie. Only
+the token digest is stored in SQLite. Cookies are HttpOnly and SameSite Strict;
+the Secure attribute is enabled when the request is served over HTTPS. Sessions
+have inactivity and absolute expirations, can be logged out or invalidated as
+a group, and are invalidated when the instructor password changes. Failed login
+throttling is persistent and records no secret material.
+
+Authentication, scenario availability, training modes, hints, answer-key
+access, solution locking, scoring, and profile-scoped progress are enforced by
+the Flask backend. Hiding or disabling a browser control is never the security
+boundary. Accepted flag answers remain only in server-side Python data, and
+unrevealed hint text is returned only by the sequential reveal endpoint.
+
+This remains a single-machine, loopback application. Student profiles have no
+passwords and anyone with local access to the browser can select them. The
+SQLite file is not encrypted at rest, reports are not tamper-resistant, and
+this is not an LMS or formal certification system. Operating-system account and
+filesystem controls remain responsible for protecting local records and the
+database backup.
+
 ## Reporting a vulnerability or a sanitization miss
 
 If you find a real secret, a real IP/hostname, a packet capture from a real

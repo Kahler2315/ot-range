@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cedar Hollow OT Range — Instructor access</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body class="workspace-entry-body">
+  <main class="auth-shell">
+    <a class="back-link" href="{{ url_for('index') }}">← Choose another workspace</a>
+    <p class="eyebrow">Cedar Hollow OT Range</p>
+    <h1 id="auth-heading">Instructor Console</h1>
+    <p id="auth-description">Checking local instructor configuration…</p>
+    <form id="instructor-auth-form" class="stacked-form auth-card">
+      <label>Instructor password
+        <input type="password" id="instructor-password" required minlength="12" autocomplete="current-password">
+      </label>
+      <label id="password-confirm-row">Confirm password
+        <input type="password" id="instructor-password-confirm" minlength="12" autocomplete="new-password">
+      </label>
+      <p class="field-help">Long passphrases and password-manager paste are supported. No composition rules are imposed.</p>
+      <button class="btn-primary" id="auth-submit" type="submit">Continue</button>
+    </form>
+    <p id="auth-status" class="form-status" role="status"></p>
+  </main>
+  <script type="module" src="{{ url_for('static', filename='auth.js') }}"></script>
+</body>
+</html>

@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cedar Hollow OT Range — Instructor Console</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+  <div class="app-shell instructor-shell">
+    <nav class="sidebar" aria-label="Instructor navigation">
+      <div class="sidebar-brand">
+        <svg class="mark" width="30" height="30" viewBox="0 0 32 32" aria-hidden="true">
+          <path d="M16 3 L27 9.5 V22.5 L16 29 L5 22.5 V9.5 Z" fill="none" stroke="var(--accent)" stroke-width="1.6"/>
+          <circle cx="16" cy="16" r="3" fill="var(--accent)"/>
+        </svg>
+        <span class="brand-text">Cedar Hollow<br><b>Instructor Console</b></span>
+      </div>
+      <ul class="sidebar-nav">
+        <li><a href="#instructor-overview" class="nav-link active">Overview</a></li>
+        <li><a href="#learner-profiles" class="nav-link">Learner Profiles</a></li>
+        <li><a href="#scenario-configuration" class="nav-link">Scenario Configuration</a></li>
+        <li><a href="#training-policies" class="nav-link">Training Policies</a></li>
+        <li><a href="#instructor-reports" class="nav-link">Reports</a></li>
+        <li><a href="#range-health" class="nav-link">Range Health</a></li>
+        <li><a href="#instructor-settings" class="nav-link">Instructor Settings</a></li>
+      </ul>
+      <div class="sidebar-footer"><a href="{{ url_for('index') }}">Switch workspace</a></div>
+    </nav>
+
+    <div class="main-area">
+      <header class="app-header">
+        <button class="btn-ghost mobile-menu-btn" id="mobile-menu-btn" aria-label="Toggle navigation menu">☰</button>
+        <span class="console-context">Local instructor session</span>
+        <div class="spacer"></div>
+        <button class="btn-ghost" id="instructor-refresh">↻ Refresh</button>
+        <button class="btn-ghost" id="instructor-logout">Log out</button>
+      </header>
+
+      <main class="workspace instructor-workspace">
+        <section id="instructor-overview" class="workspace-section">
+          <p class="eyebrow">Instructor Console</p>
+          <h1>Local training overview</h1>
+          <p class="lede">Review this installation's learner records, training activity, policies, and range readiness. This is local training data, not a remote roster or learning management system.</p>
+          <div class="analytics-grid" id="analytics-grid"><p class="status-empty">Loading…</p></div>
+          <div class="insight-grid">
+            <article class="admin-card"><h3>Most used hints</h3><div id="most-used-hints" class="ranked-list"></div></article>
+            <article class="admin-card"><h3>Frequently missed flags</h3><div id="missed-flags" class="ranked-list"></div></article>
+          </div>
+        </section>
+
+        <section id="learner-profiles" class="workspace-section">
+          <h2>Learner Profiles</h2>
+          <p class="meta-line">Local learner profiles do not have passwords and are not verified online accounts.</p>
+          <div class="admin-table-wrap">
+            <table class="progress-table">
+              <thead><tr><th>Learner</th><th>Course / section</th><th>Last activity</th><th>Actions</th></tr></thead>
+              <tbody id="instructor-profile-rows"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="scenario-configuration" class="workspace-section">
+          <h2>Scenario Configuration</h2>
+          <p class="meta-line">Disabled scenarios are rejected by the backend even if a learner calls the run endpoint directly.</p>
+          <div class="policy-list" id="scenario-policy-list">
+            {% for scenario in scenarios %}
+            <label class="settings-row scenario-policy-row">
+              <span><b>{{ scenario.id }} — {{ scenario.title }}</b><small>{{ scenario.difficulty }} · {{ scenario.estimated_duration }} · {{ scenario.process_impact_rating }} process impact</small></span>
+              <input type="checkbox" data-scenario-policy="{{ scenario.id }}">
+            </label>
+            {% endfor %}
+          </div>
+        </section>
+
+        <section id="training-policies" class="workspace-section">
+          <h2>Training Policies</h2>
+          <form id="policy-form" class="admin-card policy-list">
+            <label class="settings-row"><span><b>Scored mode</b><small>Calculate and display authoritative backend scores.</small></span><input type="checkbox" name="scoredModeEnabled"></label>
+            <label class="settings-row"><span><b>Independent investigation</b><small>Allow independent attempts and their solution-lock behavior.</small></span><input type="checkbox" name="independentModeEnabled"></label>
+            <label class="settings-row"><span><b>Guided learning</b><small>Allow guided attempts with free sequential hints.</small></span><input type="checkbox" name="guidedModeEnabled"></label>
+            <label class="settings-row"><span><b>Hints</b><small>Permit students to reveal hint text.</small></span><input type="checkbox" name="hintsEnabled"></label>
+            <label class="settings-row"><span><b>Answer keys</b><small>Permit direct student access to answer-key documents.</small></span><input type="checkbox" name="answerKeyEnabled"></label>
+            <label class="settings-row"><span><b>Walkthrough and solution documentation</b><small>Permit student access to configured walkthrough resources.</small></span><input type="checkbox" name="walkthroughEnabled"></label>
+            <div class="form-actions"><button class="btn-primary" type="submit">Save policies</button><span id="policy-status" class="form-status" role="status"></span></div>
+          </form>
+        </section>
+
+        <section id="instructor-reports" class="workspace-section">
+          <h2>Reports</h2>
+          <p class="meta-line">Exports contain authoritative local SQLite records and learner identity fields.</p>
+          <button class="btn-primary" id="export-all-records">Export all local learner records (JSON)</button>
+        </section>
+
+        <section id="range-health" class="workspace-section">
+          <h2>Range Health</h2>
+          <div class="admin-card" id="instructor-range-health"><p class="status-empty">Loading…</p></div>
+        </section>
+
+        <section id="instructor-settings" class="workspace-section">
+          <h2>Instructor Settings</h2>
+          <div class="settings-grid">
+            <form id="password-change-form" class="admin-card stacked-form">
+              <h3>Change instructor password</h3>
+              <label>Current password <input type="password" name="current_password" required autocomplete="current-password"></label>
+              <label>New password <input type="password" name="new_password" required minlength="12" autocomplete="new-password"></label>
+              <label>Confirm new password <input type="password" name="confirm_password" required minlength="12" autocomplete="new-password"></label>
+              <p class="field-help">Changing the password invalidates every instructor session, including this one.</p>
+              <button class="btn-primary" type="submit">Change password</button>
+            </form>
+            <form id="session-invalidate-form" class="admin-card stacked-form">
+              <h3>End all instructor sessions</h3>
+              <p class="meta-line">Reauthentication is required. You will be returned to the instructor access screen.</p>
+              <label>Instructor password <input type="password" name="password" required autocomplete="current-password"></label>
+              <button class="btn-secondary-danger" type="submit">End all sessions</button>
+            </form>
+          </div>
+          <p id="settings-status" class="form-status" role="status"></p>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <div class="dialog-overlay" id="reauth-overlay" hidden>
+    <form class="dialog-box stacked-form" id="reauth-form" role="dialog" aria-modal="true" aria-labelledby="reauth-title">
+      <div class="dialog-title" id="reauth-title">Confirm instructor action</div>
+      <p class="dialog-message" id="reauth-message"></p>
+      <label>Instructor password <input type="password" id="reauth-password" required autocomplete="current-password"></label>
+      <p class="form-status" id="reauth-status" role="status"></p>
+      <div class="dialog-actions"><button class="btn-ghost" type="button" id="reauth-cancel">Cancel</button><button class="btn-danger" type="submit" id="reauth-confirm">Confirm</button></div>
+    </form>
+  </div>
+
+  <script type="module" src="{{ url_for('static', filename='instructor.js') }}"></script>
+</body>
+</html>

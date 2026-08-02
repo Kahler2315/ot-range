@@ -1,36 +1,22 @@
-// Training lifecycle, scoring, hints, and instructor settings.
-//
-// All attempt/score state lives in localStorage — this project has no
-// server-side user accounts, and the spec this was built against is
-// explicit that a local, single-user implementation is correct for
-// now, structured so it could later be swapped for real accounts
-// without changing the UI code that reads it (see TrainingStore).
-//
-// Accepted flag answers and hint text are NEVER stored here — only
-// which flag ids were solved, which hint *levels* were revealed, and
-// timestamps/notes. Hint text is re-fetched from the server each time
-// it's displayed, never cached into localStorage.
+// Student training UI backed by authoritative Flask/SQLite state.
+// Accepted answers and unrevealed hint text remain server-only. The
+// browser keeps only an in-memory rendering cache; localStorage is not
+// consulted for progress, scores, hints, notes, policy, or auth state.
 
-const STORE_KEY = "ot-range-training-v1";
-
-const DEFAULT_SETTINGS = {
-  scoredModeEnabled: true,
-  hintsEnabled: true,
-  answerKeyEnabled: true,
-  walkthroughEnabled: true,
-  passphraseHash: null,
-  scenarioAvailability: {},
-};
+import { apiRequest } from "./api.js";
 
 function emptyScenarioState() {
   return {
     status: "not_started",
     mode: null,
+    scored: true,
     startedAt: null,
     completedAt: null,
     flagAttempts: {},
     hintsRevealed: {},
     flagsSolved: [],
+    pointsEarned: {},
+    documentsOpened: [],
     walkthroughOpened: false,
     answerKeyOpened: false,
     solutionLocked: false,
@@ -38,21 +24,7 @@ function emptyScenarioState() {
   };
 }
 
-function loadStore() {
-  try {
-    const raw = JSON.parse(localStorage.getItem(STORE_KEY) || "null");
-    if (raw && raw.version === 1 && raw.settings && raw.scenarios) return raw;
-  } catch {
-    /* fall through to a fresh store */
-  }
-  return { version: 1, settings: { ...DEFAULT_SETTINGS }, scenarios: {} };
-}
-
-let _store = loadStore();
-
-function saveStore() {
-  localStorage.setItem(STORE_KEY, JSON.stringify(_store));
-}
+let _store = { profileId: null, policies: {}, scenarios: {} };
 
 function getScenarioState(scenarioId) {
   if (!_store.scenarios[scenarioId]) {
@@ -62,39 +34,51 @@ function getScenarioState(scenarioId) {
 }
 
 export const TrainingStore = {
+  async initialize() {
+    _store = await apiRequest("/api/training");
+    return _store;
+  },
   get settings() {
-    return _store.settings;
+    return _store.policies;
+  },
+  get profileId() {
+    return _store.profileId;
   },
   getScenario: getScenarioState,
-  save: saveStore,
-  resetScenario(scenarioId) {
-    delete _store.scenarios[scenarioId];
-    saveStore();
+  async refreshScenario(scenarioId) {
+    const data = await apiRequest(`/api/training/${scenarioId}`);
+    _store.scenarios[scenarioId] = data.state;
+    return data.state;
   },
-  resetAll() {
-    _store = { version: 1, settings: { ..._store.settings }, scenarios: {} };
-    saveStore();
+  async refreshAll() {
+    return this.initialize();
   },
-  exportAll() {
-    return JSON.parse(JSON.stringify(_store));
+  async resetScenario(scenarioId) {
+    const data = await apiRequest(
+      `/api/profiles/${_store.profileId}/progress/${scenarioId}/reset`,
+      { method: "POST" }
+    );
+    _store.scenarios[scenarioId] = data.state;
+    return data.state;
   },
-  updateSettings(patch) {
-    _store.settings = { ..._store.settings, ...patch };
-    saveStore();
+  async resetAll() {
+    const data = await apiRequest(`/api/profiles/${_store.profileId}/reset-all`, {
+      method: "POST",
+    });
+    _store = data.training;
+    return _store;
+  },
+  async exportAll() {
+    return apiRequest(`/api/profiles/${_store.profileId}/export`);
+  },
+  replaceScenario(scenarioId, state) {
+    _store.scenarios[scenarioId] = state;
   },
 };
 
 // ====================================================================
-// Scoring — mirrors scenarios/scoring.py exactly (see
-// tests/test_scoring.py for the tested Python spec this transliterates;
-// there is no JS test runner in this repo, so this block is verified
-// by hand against that file rather than independently). If the point
-// values or hint-level rates ever change, both files must change
-// together. For this project's actual point values (5,6,7,8,9,10,12)
-// and rates (0.20, 0.35), Math.round (round-half-away-from-zero) and
-// Python's round() (round-half-to-even) never diverge — the only exact
-// .5 case in the current data (10 * 0.35 = 3.5) rounds to 4 under both
-// rules, since 4 happens to be both "round up" and "nearest even".
+// Scoring display fallback. Earned values come from the backend's
+// pointsEarned map; these helpers only render not-yet-solved flags.
 // ====================================================================
 
 const HINT_LEVEL_RATES = { 1: 0.2, 2: 0.35 };
@@ -125,31 +109,18 @@ function effectiveRevealedLevels(state, flagId) {
 
 export function ensureAttemptStarted(scenarioId) {
   const state = getScenarioState(scenarioId);
-  if (state.status === "not_started") {
-    if (!state.mode) state.mode = "independent";
-    state.status = "in_progress";
-    state.startedAt = new Date().toISOString();
-    saveStore();
-  }
+  return apiRequest(`/api/training/${scenarioId}`, {
+    method: "PATCH",
+    body: { mode: state.mode, start: true },
+  }).then((data) => {
+    TrainingStore.replaceScenario(scenarioId, data.state);
+    return data.state;
+  });
 }
 
 export function recomputeStatus(scenarioId, flags) {
-  const state = getScenarioState(scenarioId);
-  if (state.solutionLocked) {
-    state.status = "solution_revealed";
-    saveStore();
-    return state.status;
-  }
-  const allSolved = flags.length > 0 && flags.every((f) => state.flagsSolved.includes(f.id));
-  if (allSolved) {
-    const usedHints = Object.values(state.hintsRevealed).some((levels) => levels.length > 0);
-    state.status = usedHints && state.mode !== "guided" ? "completed_with_assistance" : "completed";
-    if (!state.completedAt) state.completedAt = new Date().toISOString();
-  } else if (state.status !== "not_started") {
-    state.status = "in_progress";
-  }
-  saveStore();
-  return state.status;
+  void flags;
+  return TrainingStore.refreshScenario(scenarioId).then((state) => state.status);
 }
 
 export function lifecycleLabel(state) {
@@ -163,42 +134,12 @@ export function lifecycleLabel(state) {
   return labels[state.status] || state.status;
 }
 
-export function recordFlagAttempt(scenarioId, flagId) {
-  const state = getScenarioState(scenarioId);
-  state.flagAttempts[flagId] = (state.flagAttempts[flagId] || 0) + 1;
-  saveStore();
-}
-
-export function markFlagSolved(scenarioId, flagId) {
-  const state = getScenarioState(scenarioId);
-  if (!state.flagsSolved.includes(flagId)) state.flagsSolved.push(flagId);
-  saveStore();
-}
-
-export function revealHintLevel(scenarioId, flagId, level) {
-  const state = getScenarioState(scenarioId);
-  state.hintsRevealed[flagId] = state.hintsRevealed[flagId] || [];
-  if (!state.hintsRevealed[flagId].includes(level)) state.hintsRevealed[flagId].push(level);
-  saveStore();
-}
-
 let _solutionDocs = [];
 export function setSolutionDocs(docs) {
   _solutionDocs = docs;
 }
 export function isSolutionDoc(docKey) {
   return _solutionDocs.includes(docKey);
-}
-
-export function markDocOpened(scenarioId, docKey) {
-  const state = getScenarioState(scenarioId);
-  if (isSolutionDoc(docKey)) {
-    state.answerKeyOpened = true;
-    if (state.mode !== "guided") state.solutionLocked = true;
-  } else {
-    state.walkthroughOpened = true;
-  }
-  saveStore();
 }
 
 // ====================================================================
@@ -260,11 +201,11 @@ export async function confirmRevealHint(scenarioId, flag, level) {
 
 export function confirmRevealSolution() {
   return showConfirmDialog({
-    title: "Open the answer key?",
+    title: "Opening the answer key will lock this attempt",
     message:
-      "Opening this resource will reveal solution information and permanently lock flag submission for this attempt. Your current score will be preserved, but you will not be able to earn additional points unless the scenario attempt is reset.",
-    confirmLabel: "Reveal solution and lock attempt",
-    cancelLabel: "Continue investigation",
+      "If you continue, your current score will be preserved, but you will be locked out of all further flag submissions for this attempt. You must reset the scenario attempt to earn more points. Go back if you opened this by accident.",
+    confirmLabel: "Continue and lock attempt",
+    cancelLabel: "Go back",
     danger: true,
   });
 }
@@ -293,7 +234,9 @@ export function renderFlagsSection(container, scenarioId, flags, onProgressChang
     const effectiveRevealed = effectiveRevealedLevels(state, flag.id);
     const isSolved = state.flagsSolved.includes(flag.id);
     const isLocked = state.solutionLocked && state.mode !== "guided";
-    const remaining = remainingPoints(flag.points, effectiveRevealed);
+    const remaining = isSolved
+      ? state.pointsEarned[flag.id]
+      : remainingPoints(flag.points, effectiveRevealed);
     const attempts = state.flagAttempts[flag.id] || 0;
 
     const item = document.createElement("div");
@@ -302,7 +245,7 @@ export function renderFlagsSection(container, scenarioId, flags, onProgressChang
       <div class="flag-item-head">
         <span class="sid">${flag.id}</span>
         <span class="flag-category">${flag.category}</span>
-        <span class="flag-points">${remaining} / ${flag.points} pts</span>
+        <span class="flag-points">${state.scored ? `${remaining} / ${flag.points} pts` : "Not scored"}</span>
       </div>
       <p class="flag-prompt">${escapeHtml(flag.prompt)}</p>
       <p class="flag-evidence">Evidence: ${escapeHtml(flag.evidenceSource)}</p>
@@ -320,7 +263,11 @@ export function renderFlagsSection(container, scenarioId, flags, onProgressChang
     container.appendChild(item);
 
     const hintRow = item.querySelector(".hint-row");
+    if (!TrainingStore.settings.hintsEnabled) {
+      hintRow.innerHTML = '<span class="flag-evidence">Hints are unavailable under current instructor policies.</span>';
+    }
     for (let level = 1; level <= (flag.hintCosts || []).length; level++) {
+      if (!TrainingStore.settings.hintsEnabled) break;
       if (revealed.includes(level)) continue;
       const btn = document.createElement("button");
       btn.className = "btn-ghost";
@@ -330,9 +277,14 @@ export function renderFlagsSection(container, scenarioId, flags, onProgressChang
       btn.addEventListener("click", async () => {
         const ok = await confirmRevealHint(scenarioId, flag, level);
         if (!ok) return;
-        revealHintLevel(scenarioId, flag.id, level);
-        renderFlagsSection(container, scenarioId, flags, onProgressChange);
-        onProgressChange?.();
+        try {
+          const data = await apiRequest(`/api/flags/${scenarioId}/${flag.id}/hint/${level}`);
+          TrainingStore.replaceScenario(scenarioId, data.state);
+          renderFlagsSection(container, scenarioId, flags, onProgressChange);
+          onProgressChange?.();
+        } catch (error) {
+          btn.textContent = error.message;
+        }
       });
       hintRow.appendChild(btn);
     }
@@ -342,10 +294,12 @@ export function renderFlagsSection(container, scenarioId, flags, onProgressChang
       div.className = "hint-revealed";
       div.textContent = "Loading hint…";
       item.appendChild(div);
-      fetch(`/api/flags/${scenarioId}/${flag.id}/hint/${level}`)
-        .then((r) => r.json())
+      apiRequest(`/api/flags/${scenarioId}/${flag.id}/hint/${level}`)
         .then((d) => {
           div.innerHTML = `<b>Hint ${level}:</b> ${escapeHtml(d.text)}`;
+        })
+        .catch((error) => {
+          div.textContent = error.message;
         });
     }
 
@@ -355,17 +309,27 @@ export function renderFlagsSection(container, scenarioId, flags, onProgressChang
     checkBtn?.addEventListener("click", async () => {
       const answer = input.value.trim();
       if (!answer) return;
-      ensureAttemptStarted(scenarioId);
-      recordFlagAttempt(scenarioId, flag.id);
-      const resp = await fetch("/api/flags/check", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scenario: scenarioId, flag_id: flag.id, answer }),
-      });
-      const data = await resp.json();
+      let data;
+      try {
+        data = await apiRequest("/api/flags/check", {
+          method: "POST",
+          body: { scenario: scenarioId, flag_id: flag.id, answer, training_mode: state.mode },
+        });
+        await TrainingStore.refreshScenario(scenarioId);
+      } catch (error) {
+        statusIcon.textContent = "✕";
+        statusIcon.className = "flag-status-icon incorrect";
+        let msg = item.querySelector(".flag-status-text");
+        if (!msg) {
+          msg = document.createElement("span");
+          msg.className = "flag-status-text";
+          item.querySelector(".flag-input-row").after(msg);
+        }
+        msg.textContent = error.message;
+        return;
+      }
+      const updatedState = getScenarioState(scenarioId);
       if (data.correct) {
-        markFlagSolved(scenarioId, flag.id);
-        recomputeStatus(scenarioId, flags);
         renderFlagsSection(container, scenarioId, flags, onProgressChange);
       } else {
         statusIcon.textContent = "✕";
@@ -379,7 +343,7 @@ export function renderFlagsSection(container, scenarioId, flags, onProgressChang
         }
         msg.textContent = "Not accepted. Recheck the evidence and try again.";
         item.querySelector(".flag-attempts").textContent =
-          `${state.flagAttempts[flag.id]} attempt${state.flagAttempts[flag.id] === 1 ? "" : "s"}`;
+          `${updatedState.flagAttempts[flag.id]} attempt${updatedState.flagAttempts[flag.id] === 1 ? "" : "s"}`;
       }
       onProgressChange?.();
     });
@@ -402,23 +366,35 @@ function escapeHtml(text) {
 export function renderModeSelector(container, scenarioId, onModeChange) {
   const state = getScenarioState(scenarioId);
   const locked = state.status !== "not_started";
-  if (!state.mode) state.mode = "independent";
+  const policies = TrainingStore.settings;
+  if (!state.mode) {
+    state.mode = policies.independentModeEnabled ? "independent" : "guided";
+  }
+  const independentDisabled = !policies.independentModeEnabled;
+  const guidedDisabled = !policies.guidedModeEnabled;
   container.innerHTML = `
     <label class="field-label" for="mode-select-${scenarioId}">Training mode</label>
     <div class="row" style="margin-top:4px">
       <select id="mode-select-${scenarioId}" ${locked ? "disabled" : ""}>
-        <option value="independent" ${state.mode === "independent" ? "selected" : ""}>Independent investigation (scored)</option>
-        <option value="guided" ${state.mode === "guided" ? "selected" : ""}>Guided learning (informational)</option>
+        <option value="independent" ${state.mode === "independent" ? "selected" : ""} ${independentDisabled ? "disabled" : ""}>Independent investigation${policies.scoredModeEnabled ? " (scored)" : ""}</option>
+        <option value="guided" ${state.mode === "guided" ? "selected" : ""} ${guidedDisabled ? "disabled" : ""}>Guided learning</option>
       </select>
     </div>
     ${locked ? '<p class="flag-evidence">Mode is locked once an attempt has started. Reset the attempt to change it.</p>' : ""}
   `;
   const select = container.querySelector("select");
   if (!locked) {
-    select.addEventListener("change", () => {
-      state.mode = select.value;
-      saveStore();
-      onModeChange?.();
+    select.addEventListener("change", async () => {
+      try {
+        const data = await apiRequest(`/api/training/${scenarioId}`, {
+          method: "PATCH",
+          body: { mode: select.value, start: false },
+        });
+        TrainingStore.replaceScenario(scenarioId, data.state);
+        onModeChange?.();
+      } catch (error) {
+        select.value = state.mode;
+      }
     });
   }
 }
@@ -426,9 +402,16 @@ export function renderModeSelector(container, scenarioId, onModeChange) {
 export function wireNotesField(textarea, scenarioId) {
   const state = getScenarioState(scenarioId);
   textarea.value = state.notes || "";
+  let saveTimer;
   textarea.addEventListener("input", () => {
-    state.notes = textarea.value;
-    saveStore();
+    window.clearTimeout(saveTimer);
+    saveTimer = window.setTimeout(async () => {
+      const data = await apiRequest(`/api/training/${scenarioId}`, {
+        method: "PATCH",
+        body: { notes: textarea.value },
+      });
+      TrainingStore.replaceScenario(scenarioId, data.state);
+    }, 250);
   });
 }
 
@@ -469,11 +452,10 @@ export function renderLifecycleBadges(allFlags) {
 export function buildCompletionReport(scenarioId, scenarioMeta, flags) {
   const state = getScenarioState(scenarioId);
   const solvedFlags = flags.filter((f) => state.flagsSolved.includes(f.id));
-  const earned = solvedFlags.reduce(
-    (sum, f) => sum + remainingPoints(f.points, effectiveRevealedLevels(state, f.id)),
-    0
-  );
-  const maxPoints = flags.reduce((sum, f) => sum + f.points, 0);
+  const earned = state.scored
+    ? solvedFlags.reduce((sum, flag) => sum + (state.pointsEarned[flag.id] ?? flag.points), 0)
+    : null;
+  const maxPoints = state.scored ? flags.reduce((sum, f) => sum + f.points, 0) : null;
   const hintsUsedCount = Object.values(state.hintsRevealed).reduce((sum, levels) => sum + levels.length, 0);
   const incorrectAttempts = Object.entries(state.flagAttempts).reduce((sum, [flagId, count]) => {
     const wrongAttempts = state.flagsSolved.includes(flagId) ? count - 1 : count;
@@ -490,7 +472,7 @@ export function buildCompletionReport(scenarioId, scenarioMeta, flags) {
     trainingMode: state.mode,
     finalScore: earned,
     maxScore: maxPoints,
-    percentage: maxPoints > 0 ? Math.round((earned / maxPoints) * 100) : 0,
+    percentage: maxPoints > 0 ? Math.round((earned / maxPoints) * 100) : null,
     flagsSolved: solvedFlags.length,
     totalFlags: flags.length,
     hintsUsed: hintsUsedCount,
@@ -505,7 +487,7 @@ export function buildCompletionReport(scenarioId, scenarioMeta, flags) {
     notes: state.notes,
     generatedAt: new Date().toISOString(),
     disclaimer:
-      "Local training progress only — stored in this browser, not tamper-resistant, not certification evidence.",
+      "Local training progress only — stored on this installation, not tamper-resistant, not certification evidence.",
   };
 }
 
@@ -513,7 +495,7 @@ export function buildCourseReport(scenariosMeta, allFlags) {
   return {
     generatedAt: new Date().toISOString(),
     disclaimer:
-      "Local training progress only — stored in this browser, not tamper-resistant, not certification evidence.",
+      "Local training progress only — stored on this installation, not tamper-resistant, not certification evidence.",
     scenarios: scenariosMeta.map((meta) => buildCompletionReport(meta.id, meta, allFlags[meta.id] || [])),
   };
 }
@@ -531,20 +513,23 @@ export function exportJSON(data, filename) {
 }
 
 function reportRowsHtml(r) {
+  const score = r.finalScore ?? r.score;
+  const maximum = r.maxScore ?? r.maximumScore;
+  const status = r.attemptStatusLabel ?? r.attemptStatus;
   return `
     <h2>${escapeHtml(r.scenarioTitle)} (${r.scenario})</h2>
     <table>
-      <tr><th>Status</th><td>${escapeHtml(r.attemptStatusLabel)}</td></tr>
+      <tr><th>Status</th><td>${escapeHtml(status)}</td></tr>
       <tr><th>Mode</th><td>${escapeHtml(r.trainingMode || "—")}</td></tr>
-      <tr><th>Score</th><td>${r.finalScore} / ${r.maxScore} (${r.percentage}%)</td></tr>
+      <tr><th>Score</th><td>${score === null ? "Not scored" : `${score} / ${maximum}`}</td></tr>
       <tr><th>Flags solved</th><td>${r.flagsSolved} / ${r.totalFlags}</td></tr>
       <tr><th>Hints used</th><td>${r.hintsUsed}</td></tr>
       <tr><th>Incorrect attempts</th><td>${r.incorrectAttempts}</td></tr>
       <tr><th>Started</th><td>${r.startedAt || "—"}</td></tr>
       <tr><th>Completed</th><td>${r.completedAt || "—"}</td></tr>
       <tr><th>Learning objectives</th><td>${r.learningObjectives.map(escapeHtml).join("; ")}</td></tr>
-      <tr><th>Walkthrough opened</th><td>${r.walkthroughOpened ? "Yes" : "No"}</td></tr>
-      <tr><th>Answer key opened</th><td>${r.answerKeyOpened ? "Yes" : "No"}</td></tr>
+      <tr><th>Documentation opened</th><td>${(r.documentationOpened || []).map(escapeHtml).join(", ") || "—"}</td></tr>
+      <tr><th>Answer key opened</th><td>${r.answerKeyOpened || r.solutionRevealed ? "Yes" : "No"}</td></tr>
       <tr><th>Detection outcome</th><td>${escapeHtml(r.detectionOutcome)}</td></tr>
       <tr><th>Notes</th><td>${escapeHtml(r.notes || "—")}</td></tr>
     </table>`;
@@ -556,7 +541,25 @@ export function openPrintableReport(reportOrReports, title) {
     alert("Pop-up blocked — allow pop-ups for this page to view the printable report.");
     return;
   }
-  const rows = Array.isArray(reportOrReports) ? reportOrReports : [reportOrReports];
+  const reportBundle =
+    !Array.isArray(reportOrReports) && reportOrReports?.scenarios ? reportOrReports : null;
+  const rows = reportBundle
+    ? reportBundle.scenarios
+    : Array.isArray(reportOrReports)
+      ? reportOrReports
+      : [reportOrReports];
+  const profile = reportBundle?.profile;
+  const profileHtml = profile
+    ? `<table>
+      <tr><th>Learner</th><td>${escapeHtml(profile.displayName)}</td></tr>
+      <tr><th>Learner ID</th><td>${escapeHtml(profile.learnerId || "—")}</td></tr>
+      <tr><th>Organization</th><td>${escapeHtml(profile.organization || "—")}</td></tr>
+      <tr><th>Course</th><td>${escapeHtml(profile.course || "—")}</td></tr>
+      <tr><th>Section</th><td>${escapeHtml(profile.section || "—")}</td></tr>
+      <tr><th>Instructor</th><td>${escapeHtml(profile.instructorName || "—")}</td></tr>
+      <tr><th>Local profile ID</th><td>${escapeHtml(profile.localProfileId)}</td></tr>
+    </table>`
+    : "";
   win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title>
     <style>
       body { font-family: -apple-system, "Segoe UI", Arial, sans-serif; padding: 28px; color: #111; }
@@ -566,8 +569,9 @@ export function openPrintableReport(reportOrReports, title) {
       .disclaimer { color: #a15c00; font-size: 0.8rem; margin-top: 24px; }
     </style></head><body>
     <h1>${escapeHtml(title)}</h1>
+    ${profileHtml}
     ${rows.map(reportRowsHtml).join("")}
-    <p class="disclaimer">Local training progress only — stored in this browser, not tamper-resistant, not suitable as formal certification evidence.</p>
+    <p class="disclaimer">Local training progress only — stored on this installation, not tamper-resistant, not suitable as formal certification evidence.</p>
     </body></html>`);
   win.document.close();
   win.focus();
@@ -591,8 +595,8 @@ export function renderProgressSection(scenariosMeta, allFlags, onExportOne) {
     const flags = allFlags[meta.id] || [];
     const state = getScenarioState(meta.id);
     const report = buildCompletionReport(meta.id, meta, flags);
-    totalEarned += report.finalScore;
-    totalMax += report.maxScore;
+    totalEarned += report.finalScore || 0;
+    totalMax += report.maxScore || 0;
     totalSolved += report.flagsSolved;
     totalFlagsCount += report.totalFlags;
 
@@ -602,7 +606,7 @@ export function renderProgressSection(scenariosMeta, allFlags, onExportOne) {
       <td>${escapeHtml(lifecycleLabel(state))}</td>
       <td>${escapeHtml(state.mode || "—")}</td>
       <td>${report.flagsSolved}/${report.totalFlags}</td>
-      <td>${report.finalScore}/${report.maxScore}</td>
+      <td>${report.finalScore === null ? "Not scored" : `${report.finalScore}/${report.maxScore}`}</td>
       <td>${report.hintsUsed}</td>
       <td><button class="btn-ghost export-one-btn" data-scenario="${meta.id}">Export</button></td>
     `;
@@ -614,95 +618,6 @@ export function renderProgressSection(scenariosMeta, allFlags, onExportOne) {
     <div class="metric"><span class="metric-value">${totalSolved}/${totalFlagsCount}</span><span class="metric-label">flags solved</span></div>
     <div class="metric"><span class="metric-value">${totalEarned}/${totalMax}</span><span class="metric-label">points</span></div>
   `;
-}
-
-// ====================================================================
-// Instructor settings — an OPTIONAL local convenience lock, not real
-// authentication. Only the SHA-256 hash of the passphrase is ever
-// stored (Web Crypto SubtleCrypto, native, no dependency); the
-// passphrase itself never touches localStorage.
-// ====================================================================
-
-async function sha256Hex(text) {
-  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
-  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
-}
-
-export function initInstructorPanel(scenariosMeta, onSettingsChanged) {
-  const lockedView = document.getElementById("instructor-locked-view");
-  const settingsView = document.getElementById("instructor-settings-view");
-  const unlockBtn = document.getElementById("instructor-unlock-btn");
-  const passInput = document.getElementById("instructor-passphrase-input");
-
-  const renderSettings = () => {
-    const s = TrainingStore.settings;
-    settingsView.innerHTML = `
-      <div class="settings-row"><label for="set-scored">Scored mode enabled</label><input type="checkbox" id="set-scored" ${s.scoredModeEnabled ? "checked" : ""}></div>
-      <div class="settings-row"><label for="set-hints">Hints enabled</label><input type="checkbox" id="set-hints" ${s.hintsEnabled ? "checked" : ""}></div>
-      <div class="settings-row"><label for="set-answerkey">Answer key access</label><input type="checkbox" id="set-answerkey" ${s.answerKeyEnabled ? "checked" : ""}></div>
-      <div class="settings-row"><label for="set-walkthrough">Detection/impact docs access</label><input type="checkbox" id="set-walkthrough" ${s.walkthroughEnabled ? "checked" : ""}></div>
-      ${scenariosMeta
-        .map(
-          (m) => `<div class="settings-row"><label>${m.id} available</label><input type="checkbox" class="set-scenario-avail" data-scenario="${m.id}" ${s.scenarioAvailability[m.id] !== false ? "checked" : ""}></div>`
-        )
-        .join("")}
-      <div class="settings-row"><label for="set-passphrase">New passphrase (blank = remove lock)</label><input type="password" id="set-passphrase" placeholder="leave blank for none"></div>
-      <div class="row" style="margin-top:12px">
-        <button class="btn-primary" id="settings-save-btn">Save settings</button>
-        <button class="btn-ghost" id="settings-export-btn">Export all local progress</button>
-        <button class="btn-secondary-danger" id="settings-reset-all-btn">Reset all local progress</button>
-      </div>
-    `;
-    settingsView.querySelector("#settings-save-btn").addEventListener("click", async () => {
-      const patch = {
-        scoredModeEnabled: settingsView.querySelector("#set-scored").checked,
-        hintsEnabled: settingsView.querySelector("#set-hints").checked,
-        answerKeyEnabled: settingsView.querySelector("#set-answerkey").checked,
-        walkthroughEnabled: settingsView.querySelector("#set-walkthrough").checked,
-        scenarioAvailability: {},
-      };
-      settingsView.querySelectorAll(".set-scenario-avail").forEach((cb) => {
-        patch.scenarioAvailability[cb.dataset.scenario] = cb.checked;
-      });
-      const newPass = settingsView.querySelector("#set-passphrase").value;
-      if (newPass) patch.passphraseHash = await sha256Hex(newPass);
-      TrainingStore.updateSettings(patch);
-      onSettingsChanged?.();
-    });
-    settingsView.querySelector("#settings-export-btn").addEventListener("click", () => {
-      exportJSON(TrainingStore.exportAll(), "ot-range-local-progress.json");
-    });
-    settingsView.querySelector("#settings-reset-all-btn").addEventListener("click", async () => {
-      const ok = await showConfirmDialog({
-        title: "Reset ALL local progress?",
-        message:
-          "This erases every scenario's local progress, scores, hints, and notes in this browser. Instructor settings are kept. This cannot be undone.",
-        confirmLabel: "Reset everything",
-        cancelLabel: "Cancel",
-        danger: true,
-      });
-      if (ok) {
-        TrainingStore.resetAll();
-        onSettingsChanged?.();
-      }
-    });
-  };
-
-  const tryUnlock = async () => {
-    const hash = TrainingStore.settings.passphraseHash;
-    if (!hash || (await sha256Hex(passInput.value)) === hash) {
-      lockedView.hidden = true;
-      settingsView.hidden = false;
-      renderSettings();
-    } else {
-      passInput.value = "";
-      passInput.placeholder = "incorrect passphrase";
-    }
-  };
-  unlockBtn.addEventListener("click", tryUnlock);
-  passInput.addEventListener("keydown", (ev) => {
-    if (ev.key === "Enter") tryUnlock();
-  });
 }
 
 // ====================================================================

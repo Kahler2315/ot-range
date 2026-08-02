@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Cedar Hollow OT Range — Control Panel</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+  <title>Cedar Hollow OT Range — Student Lab</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css', v='phase2a-map-dark-1') }}">
 </head>
 <body>
   <div class="app-shell">
@@ -18,11 +18,12 @@
         <span class="brand-text">Cedar Hollow<br><b>OT Range</b></span>
       </div>
       <ul class="sidebar-nav">
-        <li><a href="#overview" class="nav-link" data-nav="overview">Overview</a></li>
-        <li><a href="#plant-services" class="nav-link" data-nav="plant-services">Plant Services</a></li>
+        <li><a href="#overview" class="nav-link" data-nav="overview">Home</a></li>
         <li><a href="#scenarios" class="nav-link" data-nav="scenarios">Scenarios</a></li>
         <li><a href="#progress" class="nav-link" data-nav="progress">Investigation Progress</a></li>
         <li><a href="#network-map" class="nav-link" data-nav="network-map">Network Map</a></li>
+        <li><a href="#reports" class="nav-link" data-nav="reports">Reports</a></li>
+        <li><a href="#help" class="nav-link" data-nav="help">Help</a></li>
         <li><a href="#" class="nav-link" id="nav-console-link" data-nav="console">Console</a></li>
       </ul>
       <div class="sidebar-footer">
@@ -38,12 +39,49 @@
           <span id="readiness-word">Loading</span>
         </div>
         <span class="header-busy" id="header-busy" hidden>Busy — job running</span>
+        <nav class="header-service-links" aria-label="Open range web services">
+          <a href="http://localhost:8080" target="_blank" rel="noopener">
+            <svg class="service-icon openplc-icon" viewBox="0 0 20 20" aria-hidden="true"><rect x="2.5" y="2.5" width="15" height="15" rx="3"/><path d="M6 6v8M14 6v8M6 8h3l2 4h3M6 13h3"/><circle cx="10" cy="8" r="1.2"/></svg>
+            <span>OpenPLC</span><span class="external-mark" aria-hidden="true">↗</span>
+          </a>
+          <a href="http://localhost:8090" target="_blank" rel="noopener">
+            <svg class="service-icon hmi-icon" viewBox="0 0 20 20" aria-hidden="true"><rect x="2" y="3" width="16" height="12" rx="2.5"/><path d="M5 12l3-3 2.2 2 4-5M7 17h6"/></svg>
+            <span>HMI</span><span class="external-mark" aria-hidden="true">↗</span>
+          </a>
+          <a href="http://localhost:3000" target="_blank" rel="noopener">
+            <svg class="service-icon grafana-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M11.3 2.5c.3 2-1.4 2.8-2.3 4.1-1.1 1.5-.5 2.9.7 3.6-.2-1.5.8-2.4 1.8-3.3 2.1 1.2 3.6 3 3.6 5.3 0 3-2.3 5.3-5.4 5.3S4.4 15.2 4.4 12c0-3.9 2.8-6.9 6.9-9.5Z"/><path d="M10 11.2c1.3.8 2 1.7 2 2.8 0 1.2-.9 2.1-2.2 2.1-1.3 0-2.2-.9-2.2-2.1 0-1 .8-2 2.4-2.8Z"/></svg>
+            <span>Grafana</span><span class="external-mark" aria-hidden="true">↗</span>
+          </a>
+        </nav>
+        <details class="header-tool-logins">
+          <summary>Tool logins</summary>
+          <div class="tool-login-popover">
+            <p>Range service defaults — not your instructor password.</p>
+            <div class="tool-login-row">
+              <b>OpenPLC</b>
+              <span>User</span><button type="button" data-copy-value="openplc" aria-label="Copy OpenPLC username"><code>openplc</code><small>Copy</small></button>
+              <span>Password</span><button type="button" data-copy-value="openplc" aria-label="Copy OpenPLC password"><code>openplc</code><small>Copy</small></button>
+            </div>
+            <div class="tool-login-row">
+              <b>Grafana</b>
+              <span>User</span><button type="button" data-copy-value="admin" aria-label="Copy Grafana username"><code>admin</code><small>Copy</small></button>
+              <span>Password</span><button type="button" data-copy-value="admin" aria-label="Copy Grafana password"><code>admin</code><small>Copy</small></button>
+            </div>
+            <div class="tool-login-row no-login"><b>HMI</b><span>No login required</span></div>
+            <p class="tool-login-status" id="tool-login-status" role="status"></p>
+          </div>
+        </details>
         <div class="spacer"></div>
+        <div class="active-profile-chip">
+          <span>Local learner:</span> <b>{{ profile.display_name }}</b>
+          <a href="{{ url_for('index') }}">Switch</a>
+        </div>
         <div class="header-flags"><span aria-hidden="true">🏁</span> <b id="flags-total">— / —</b> flags</div>
       </header>
 
       <main class="workspace" id="main-content">
         <section id="overview" class="workspace-section" aria-labelledby="overview-heading">
+          <p class="eyebrow">Student Lab</p>
           <h1 id="overview-heading">Cedar Hollow OT Cyber Range</h1>
           <p class="lede">
             Bring the plant online, launch attack scenarios against a real
@@ -81,15 +119,15 @@
               <p><b>Intended audience:</b> university cybersecurity programs, corporate security training teams, OT asset owners, cyber range instructors, and self-study learners.</p>
               <p><b>Safety limitations:</b> simulated environment only. Attack tooling is hard-bound to this range's own address space — see <a href="https://github.com/Kahler2315/ot-range/blob/master/SECURITY.md" target="_blank" rel="noopener">SECURITY.md</a>. Never point anything here at real equipment.</p>
               <p><b>Supported scenarios:</b> {{ scenarios|length }} — recon, unauthorized command, manipulation of view, and PLC logic modification. See <a href="https://github.com/Kahler2315/ot-range/blob/master/docs/coverage-matrix.md" target="_blank" rel="noopener">coverage-matrix.md</a> for exactly what's detected and what isn't.</p>
-              <p><b>Local-only architecture:</b> this control panel binds to 127.0.0.1 only and never leaves your machine. Progress and scoring live in your browser's local storage — see the Investigation Progress section.</p>
+              <p><b>Local-only architecture:</b> this control panel binds to 127.0.0.1 only and never leaves your machine. Learner profiles, progress, and scoring are stored in this installation's local SQLite database.</p>
               <p><b>Licensing:</b> Apache-2.0 for all original code; third-party components (OpenPLC, Zeek, Suricata, Grafana) retain their own licenses — see <a href="https://github.com/Kahler2315/ot-range/blob/master/docs/licenses.md" target="_blank" rel="noopener">docs/licenses.md</a>.</p>
               <p><b>Model fidelity:</b> the simulated process is educational, not an engineering-accurate hydraulic model — tank/pump/demand numbers are tuned to be legible on a dashboard, not for real process engineering analysis.</p>
-              <p class="local-progress-note"><b>Local training progress only:</b> completion reports generated here are stored in your browser and are not tamper-resistant or suitable as formal certification evidence.</p>
+              <p class="local-progress-note"><b>Local training progress only:</b> completion reports generated here use this installation's SQLite records and are not tamper-resistant or suitable as formal certification evidence.</p>
             </div>
           </details>
         </section>
 
-        <section id="plant-services" class="workspace-section" aria-labelledby="services-heading">
+        <section id="plant-services" class="supporting-section" aria-labelledby="services-heading">
           <h2 id="services-heading">Plant Services</h2>
           <div class="service-groups" id="service-groups">
             <p class="status-empty">Loading…</p>
@@ -115,12 +153,19 @@
                   {% endif %}
                 </span>
                 <span class="sid">{{ s.id }}</span>
-                <span class="severity severity-{{ s.severity }}">{{ s.severity }}</span>
+                <span class="severity severity-{{ s.severity }}">Process impact: {{ s.process_impact_rating }}</span>
               </div>
               <h3>{{ s.title }}</h3>
               <p class="hook">{{ s.hook }}</p>
               <p class="meta-line"><b>Impact:</b> {{ s.impact }}</p>
               <p class="meta-line"><b>Caught by:</b> {{ s.caught_by }}</p>
+              <dl class="scenario-metadata">
+                <div><dt>Difficulty</dt><dd>{{ s.difficulty }}</dd></div>
+                <div><dt>Estimated time</dt><dd>{{ s.estimated_duration }}</dd></div>
+                <div><dt>Primary skill</dt><dd>{{ s.primary_skills[0] }}</dd></div>
+                <div><dt>Process impact</dt><dd>{{ s.process_impact_rating }}</dd></div>
+                <div><dt>Detection coverage</dt><dd>{{ s.detection_coverage_state }}</dd></div>
+              </dl>
               <div class="scenario-card-footer">
                 <span class="lifecycle-badge" data-lifecycle="{{ s.id }}">Not started</span>
                 <span class="flag-progress" data-flag-count="{{ s.id }}">— flags</span>
@@ -142,31 +187,6 @@
               <tbody id="progress-table-body"></tbody>
             </table>
           </div>
-          <div class="report-actions">
-            <button class="btn-ghost" id="export-course-json">Export course report (JSON)</button>
-            <button class="btn-ghost" id="export-course-print">Printable course report</button>
-          </div>
-
-          <details class="instructor-panel">
-            <summary>Instructor settings</summary>
-            <div class="instructor-body" id="instructor-body">
-              <p class="instructor-warning">
-                This is a <b>local convenience lock</b>, not real
-                authentication — anyone with browser access to this
-                machine can clear it. Do not rely on it to prevent
-                students from changing settings if that matters for
-                your use case.
-              </p>
-              <div id="instructor-locked-view">
-                <label class="field-label" for="instructor-passphrase-input">Passphrase (leave blank if none set)</label>
-                <div class="row">
-                  <input type="password" id="instructor-passphrase-input" placeholder="passphrase">
-                  <button class="btn-primary" id="instructor-unlock-btn">Unlock settings</button>
-                </div>
-              </div>
-              <div id="instructor-settings-view" hidden></div>
-            </div>
-          </details>
         </section>
 
         <section id="network-map" class="workspace-section" aria-labelledby="map-heading">
@@ -188,8 +208,9 @@
             <button class="banner-dismiss" id="map-overlay-locked-close" type="button"
                     aria-label="Dismiss scenario overlay warning">✕</button>
           </div>
+          <div class="map-overlay-summary" id="map-overlay-summary" role="status" hidden></div>
           <div class="map-canvas-wrap" id="map-canvas-wrap">
-            <svg id="map-svg" viewBox="0 0 900 460" role="group" aria-label="Range network topology" tabindex="0"></svg>
+            <svg id="map-svg" viewBox="0 0 1100 560" role="group" aria-label="Range network topology" tabindex="0"></svg>
           </div>
           <div class="map-legend" aria-hidden="false">
             <span class="legend-item"><span class="legend-swatch legend-normal"></span>Normal traffic</span>
@@ -202,6 +223,46 @@
             <span class="legend-item"><span class="legend-dot legend-detect"></span>Detection point</span>
           </div>
           <div class="map-node-detail" id="map-node-detail" hidden></div>
+        </section>
+
+        <section id="reports" class="workspace-section" aria-labelledby="reports-heading">
+          <h2 id="reports-heading">Reports</h2>
+          <p class="meta-line">Exports use this learner profile's authoritative local training record.</p>
+          <div class="report-actions">
+            <button class="btn-ghost" id="export-course-json">Export learner report (JSON)</button>
+            <button class="btn-ghost" id="export-course-print">Printable learner report</button>
+          </div>
+          <p class="local-progress-note">Local training progress only — not tamper-resistant or suitable as formal certification evidence.</p>
+        </section>
+
+        <section id="help" class="workspace-section" aria-labelledby="help-heading">
+          <h2 id="help-heading">Help</h2>
+          <div class="help-grid">
+            <article><h3>Investigation flow</h3><p>Choose a scenario, select independent or guided training, run an available execution environment, inspect evidence, and submit flags.</p></article>
+            <article><h3>Local learner profiles</h3><p>Your progress belongs to the active local learner profile. Use <b>Switch</b> in the header to change profiles safely.</p></article>
+            <article><h3>Safety</h3><p>This is a simulated environment only. Read <a href="https://github.com/Kahler2315/ot-range/blob/master/SECURITY.md" target="_blank" rel="noopener">SECURITY.md</a> before running scenarios.</p></article>
+          </div>
+          <details class="profile-management admin-card">
+            <summary>Manage active local learner profile</summary>
+            <form id="student-profile-form" class="stacked-form">
+              <label>Display name <input name="display_name" required maxlength="120" value="{{ profile.display_name }}"></label>
+              <div class="form-grid">
+                <label>Learner ID <input name="learner_id" maxlength="200" value="{{ profile.learner_id or '' }}"></label>
+                <label>Organization or school <input name="organization" maxlength="200" value="{{ profile.organization or '' }}"></label>
+                <label>Course <input name="course" maxlength="200" value="{{ profile.course or '' }}"></label>
+                <label>Section or cohort <input name="section" maxlength="200" value="{{ profile.section or '' }}"></label>
+                <label>Instructor name <input name="instructor_name" maxlength="200" value="{{ profile.instructor_name or '' }}"></label>
+              </div>
+              <div class="form-actions"><button class="btn-primary" type="submit">Save profile</button><button class="btn-secondary-warn" type="button" id="student-reset-all">Reset all my progress</button></div>
+            </form>
+            <form id="student-delete-profile-form" class="profile-delete-form stacked-form">
+              <h3>Delete this local learner profile</h3>
+              <p class="meta-line">This permanently deletes only this profile and its training records. Enter the display name to confirm.</p>
+              <label>Confirm display name <input name="confirm_display_name" required autocomplete="off"></label>
+              <button class="btn-secondary-danger" type="submit">Delete my profile and progress</button>
+            </form>
+            <p id="student-profile-status" class="form-status" role="status"></p>
+          </details>
         </section>
       </main>
     </div>
@@ -261,7 +322,9 @@
 
   <div id="scenarios-data" hidden>{{ scenarios | tojson }}</div>
   <div id="solution-docs-data" hidden>{{ solution_docs | tojson }}</div>
+  <div id="profile-data" hidden>{{ profile | tojson }}</div>
 
-  <script type="module" src="{{ url_for('static', filename='app.js') }}"></script>
+  <script type="module" src="{{ url_for('static', filename='app.js', v='phase2a-map-dark-1') }}"></script>
+  <script type="module" src="{{ url_for('static', filename='student.js', v='phase2a-map-dark-1') }}"></script>
 </body>
 </html>

@@ -67,6 +67,14 @@ and detection as it runs — no terminal commands to memorize. Everything
 it does is one of the `make` targets below, run for you; nothing
 hidden. See [`panel/app.py`](panel/app.py).
 
+The first screen separates the **Student Lab** from the password-protected
+**Instructor Console**. Local learner profiles, notes, scores, hints, and
+reports are stored in SQLite under Flask's ignored `panel/instance/` data
+directory. There is no default instructor password: create one on the first
+visit to Instructor Console. Instructor credentials use salted scrypt hashes,
+and authenticated sessions are opaque, server-side records rather than browser
+storage. Local learner profiles are not verified online accounts.
+
 Each scenario also has 5 short-answer flags (20 total) pulled straight
 from its own answer key — a concrete "did I actually find the thing"
 check, not just a pass/fail on running the attack script. Answers are

@@ -15,21 +15,48 @@ from scenarios.flags import FLAGS_BY_SCENARIO
 
 
 @pytest.fixture
-def client():
-    panel_app.app.testing = True
-    with panel_app.app.test_client() as c:
-        yield c
-    # Reset global job state between tests — panel/app.py's job
-    # tracking is module-level, same as the real process.
-    with panel_app._jobs_guard:
-        panel_app._jobs.clear()
-        panel_app._current_job_id = None
+def client(student_client):
+    return student_client
 
 
 def test_index_renders(client):
     resp = client.get("/")
     assert resp.status_code == 200
     assert b"OT Range" in resp.data or b"OT_RANGE" in resp.data
+
+
+def test_workspace_chooser_and_student_lab_are_clearly_separated(client):
+    chooser = client.get("/").get_data(as_text=True)
+    assert "Choose your workspace" in chooser
+    assert "Student Lab" in chooser
+    assert "Instructor Console" in chooser
+    assert "Student profiles identify local training records" in chooser
+
+    student = client.get("/student").get_data(as_text=True)
+    assert "Student Lab" in student
+    assert "Training Policies" not in student
+    assert "Instructor Settings" not in student
+
+
+def test_student_source_has_metadata_and_no_accepted_answers(client):
+    html = client.get("/student").get_data(as_text=True)
+    assert "Difficulty" in html
+    assert "Estimated time" in html
+    assert "Process impact:" in html
+    assert '"accepted"' not in html
+
+
+def test_frontend_clean_cutover_has_no_authoritative_localstorage_key():
+    for path in (
+        panel_app.REPO_ROOT / "panel/static/app.js",
+        panel_app.REPO_ROOT / "panel/static/training.js",
+        panel_app.REPO_ROOT / "panel/static/student.js",
+        panel_app.REPO_ROOT / "panel/static/instructor.js",
+        panel_app.REPO_ROOT / "panel/static/auth.js",
+    ):
+        source = path.read_text()
+        assert "ot-range-training-v1" not in source
+        assert "instructor-authenticated" not in source
 
 
 def test_api_status_shape(client):
@@ -141,6 +168,17 @@ def test_api_run_rejects_unknown_mode_index(client):
     assert resp.status_code == 400
 
 
+@pytest.mark.parametrize("payload", [[], ["not", "an", "object"]])
+def test_mutating_apis_reject_non_object_json(client, payload):
+    assert client.post("/api/run", json=payload).status_code == 400
+    assert client.post("/api/flags/check", json=payload).status_code == 400
+
+
+def test_api_run_rejects_negative_or_wrong_type_mode(client):
+    assert client.post("/api/run", json={"scenario": "S01", "mode_index": -1}).status_code == 400
+    assert client.post("/api/run", json={"scenario": ["S01"], "mode_index": 0}).status_code == 400
+
+
 def test_sidebar_nav_targets_all_resolve(client):
     # Every sidebar nav-link's data-nav must be either a real element
     # id on the page (so the scroll-position highlight can track it) or
@@ -150,7 +188,7 @@ def test_sidebar_nav_targets_all_resolve(client):
     # neither can never highlight or navigate anywhere — this caught a
     # real bug where "Console" pointed at a nonexistent
     # #console-section anchor.
-    html = client.get("/").get_data(as_text=True)
+    html = client.get("/student").get_data(as_text=True)
     nav_targets = re.findall(r'class="nav-link"[^>]*data-nav="([^"]+)"', html)
     assert nav_targets, "no sidebar nav links found"
     for target in nav_targets:
@@ -163,7 +201,7 @@ def test_sidebar_nav_targets_all_resolve(client):
 
 def test_sidebar_scroll_links_follow_workspace_section_order(client):
     """The visible navigation order should match the page's reading order."""
-    html = client.get("/").get_data(as_text=True)
+    html = client.get("/student").get_data(as_text=True)
     nav_targets = re.findall(r'class="nav-link"[^>]*data-nav="([^"]+)"', html)
     scroll_targets = [target for target in nav_targets if target != "console"]
     section_targets = re.findall(r'<section id="([^"]+)" class="workspace-section"', html)
@@ -171,8 +209,33 @@ def test_sidebar_scroll_links_follow_workspace_section_order(client):
 
 
 def test_map_overlay_warning_is_dismissible(client):
-    html = client.get("/").get_data(as_text=True)
+    html = client.get("/student").get_data(as_text=True)
     assert 'id="map-overlay-locked-note"' in html
     assert 'id="map-overlay-locked-message"' in html
     assert 'id="map-overlay-locked-close"' in html
     assert 'aria-label="Dismiss scenario overlay warning"' in html
+
+
+def test_answer_key_warning_uses_explicit_lock_and_back_actions():
+    source = (panel_app.REPO_ROOT / "panel/static/training.js").read_text()
+    assert "Opening the answer key will lock this attempt" in source
+    assert 'confirmLabel: "Continue and lock attempt"' in source
+    assert 'cancelLabel: "Go back"' in source
+
+
+def test_network_map_exposes_local_service_links(client):
+    html = client.get("/student").get_data(as_text=True)
+    assert 'href="http://localhost:8080"' in html
+    assert 'href="http://localhost:8090"' in html
+    assert 'href="http://localhost:3000"' in html
+    assert 'class="header-service-links"' in html
+    assert "OpenPLC" in html
+    assert "Grafana" in html
+
+
+def test_student_header_exposes_copyable_range_tool_logins(client):
+    html = client.get("/student").get_data(as_text=True)
+    assert "Tool logins" in html
+    assert 'data-copy-value="openplc"' in html
+    assert 'data-copy-value="admin"' in html
+    assert "not your instructor password" in html

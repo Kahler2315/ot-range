@@ -30,6 +30,7 @@ LEARNING_OBJECTIVES = {
 @dataclass
 class Mode:
     label: str
+    description: str
     command: list[str]
     requires_docker_stack: bool = False
 
@@ -50,6 +51,14 @@ class Scenario:
     # "critical" in coverage-matrix.md.
     severity: str = "critical"
     objectives: list[str] = field(default_factory=list)
+    difficulty: str = "Intermediate"
+    estimated_duration: str = "30 to 45 minutes"
+    prerequisites: list[str] = field(default_factory=list)
+    primary_skills: list[str] = field(default_factory=list)
+    evidence_sources: list[str] = field(default_factory=list)
+    recommended_training_mode: str = "Independent investigation"
+    process_impact_rating: str = "Critical"
+    detection_coverage_state: str = "Critical alert"
 
     @property
     def dirname(self) -> Path:
@@ -66,10 +75,23 @@ SCENARIOS = [
         caught_by="4 detection rules (unauthorized source, point/unit-ID sweeps, exception spikes)",
         severity="informational",
         objectives=["obj-recon", "obj-correlate"],
+        difficulty="Beginner",
+        estimated_duration="20 to 30 minutes",
+        prerequisites=["Basic IP networking", "Introductory Modbus concepts"],
+        primary_skills=["Modbus traffic analysis", "Reconnaissance triage"],
+        evidence_sources=["Modbus capture log", "Detection output", "Expected-impact notes"],
+        recommended_training_mode="Independent investigation",
+        process_impact_rating="None",
+        detection_coverage_state="High-severity alerts",
         modes=[
-            Mode("loopback (fast, self-contained)", ["bash", "scenarios/run_scenario.sh", "S01"]),
             Mode(
-                "real network, via router/Zeek/Suricata (requires `make up`)",
+                "Quick Simulation",
+                "Fast local execution using the simplified scenario environment.",
+                ["bash", "scenarios/run_scenario.sh", "S01"],
+            ),
+            Mode(
+                "Full Monitored Network",
+                "Runs through the routed environment with Zeek and Suricata visibility.",
                 ["make", "scenario-S01-docker"],
                 requires_docker_stack=True,
             ),
@@ -84,10 +106,23 @@ SCENARIOS = [
         caught_by="MODBUS_UNAUTHORIZED_WRITE (critical)",
         severity="critical",
         objectives=["obj-unauth-cmd", "obj-correlate", "obj-impact"],
+        difficulty="Intermediate",
+        estimated_duration="30 to 45 minutes",
+        prerequisites=["S01 or equivalent Modbus log familiarity", "Basic control-loop concepts"],
+        primary_skills=["Unauthorized command analysis", "Process/network correlation"],
+        evidence_sources=["Modbus capture log", "Point map", "PLC logic", "HMI process state"],
+        recommended_training_mode="Independent investigation",
+        process_impact_rating="Critical",
+        detection_coverage_state="Critical alert",
         modes=[
-            Mode("loopback (fast, self-contained)", ["bash", "scenarios/run_scenario.sh", "S03"]),
             Mode(
-                "real network, via router/Zeek/Suricata (requires `make up`)",
+                "Quick Simulation",
+                "Fast local execution using the simplified scenario environment.",
+                ["bash", "scenarios/run_scenario.sh", "S03"],
+            ),
+            Mode(
+                "Full Monitored Network",
+                "Runs through the routed environment with Zeek and Suricata visibility.",
                 ["make", "scenario-S03-docker"],
                 requires_docker_stack=True,
             ),
@@ -103,8 +138,20 @@ SCENARIOS = [
         "vs. spoofed transmitter, source-independent",
         severity="critical",
         objectives=["obj-view-manip", "obj-correlate"],
+        difficulty="Advanced",
+        estimated_duration="45 to 60 minutes",
+        prerequisites=["S01 and S03", "Modbus function-code familiarity"],
+        primary_skills=["Manipulation-of-view detection", "Independent sensor correlation"],
+        evidence_sources=["HMI", "Hardwired float state", "Modbus capture log", "Detection output"],
+        recommended_training_mode="Independent investigation",
+        process_impact_rating="Critical",
+        detection_coverage_state="Two critical alerts",
         modes=[
-            Mode("loopback (fast, self-contained)", ["bash", "scenarios/run_scenario.sh", "S05"]),
+            Mode(
+                "Quick Simulation",
+                "Fast local execution using the simplified scenario environment.",
+                ["bash", "scenarios/run_scenario.sh", "S05"],
+            ),
         ],
     ),
     Scenario(
@@ -121,9 +168,18 @@ SCENARIOS = [
         "scenario's own teaching point.",
         severity="critical",
         objectives=["obj-logic-mod", "obj-blind-spot", "obj-impact"],
+        difficulty="Advanced",
+        estimated_duration="45 to 60 minutes",
+        prerequisites=["Basic IEC 61131-3 logic reading", "OpenPLC and Modbus familiarity"],
+        primary_skills=["PLC logic integrity review", "Monitoring-gap analysis"],
+        evidence_sources=["OpenPLC web UI", "Structured Text diff", "Detection documentation"],
+        recommended_training_mode="Guided learning for first attempt",
+        process_impact_rating="Critical",
+        detection_coverage_state="Monitoring gap — program change not detected",
         modes=[
             Mode(
-                "OpenPLC web UI + Modbus, live (requires `make up`)",
+                "Live PLC Investigation",
+                "Uses the running OpenPLC environment and its web and Modbus interfaces.",
                 ["make", "scenario-S06"],
                 requires_docker_stack=True,
             ),
