@@ -1,125 +1,248 @@
-const STATUS_LABELS = {
-  "ot-range-process-sim-1": "process-sim",
-  "ot-range-openplc-1": "OpenPLC",
-  "ot-range-hmi-1": "HMI",
-  "ot-range-historian-1": "historian",
-  "ot-range-postgres-1": "postgres",
-  "ot-range-grafana-1": "Grafana",
-  "ot-range-router-1": "router",
+// App shell orchestration: stack actions, status polling, service
+// panel, scenario cards/drawer, doc viewer, console, progress
+// section, sidebar nav. Training lifecycle/scoring logic lives in
+// training.js; network map rendering lives in networkmap.js — this
+// file wires them together and owns everything that talks to the
+// Flask backend directly.
+
+import {
+  TrainingStore,
+  buildCompletionReport,
+  buildCourseReport,
+  confirmResetAttempt,
+  confirmRevealSolution,
+  ensureAttemptStarted,
+  exportJSON,
+  initInstructorPanel,
+  isSolutionDoc,
+  lifecycleLabel,
+  markDocOpened,
+  openPrintableReport,
+  recomputeStatus,
+  renderFlagsSection,
+  renderLifecycleBadges,
+  renderModeSelector,
+  renderProgressSection,
+  setSolutionDocs,
+  showConfirmDialog,
+  trapFocus,
+  wireNotesField,
+} from "./training.js";
+import { initNetworkMap, resetMapView, setMapOverlay, toggleMapPorts, updateMapHealth } from "./networkmap.js";
+
+const SCENARIOS = JSON.parse(document.getElementById("scenarios-data").textContent);
+const SCENARIOS_BY_ID = Object.fromEntries(SCENARIOS.map((s) => [s.id, s]));
+setSolutionDocs(JSON.parse(document.getElementById("solution-docs-data").textContent));
+
+const DOC_LABELS = {
+  briefing: "Briefing",
+  detection: "Detection",
+  "expected-impact": "Expected impact",
+  "answer-key": "Answer key",
 };
 
-const SOLVED_KEY = "ot-range-flags-solved";
-let FLAGS = {}; // { scenarioId: [{id, prompt, hint}, ...] }
-
-function loadSolved() {
-  try {
-    return JSON.parse(localStorage.getItem(SOLVED_KEY) || "{}");
-  } catch {
-    return {};
-  }
-}
-
-function saveSolved(solved) {
-  localStorage.setItem(SOLVED_KEY, JSON.stringify(solved));
-}
-
-function markSolved(scenarioId, flagId) {
-  const solved = loadSolved();
-  solved[scenarioId] = solved[scenarioId] || [];
-  if (!solved[scenarioId].includes(flagId)) solved[scenarioId].push(flagId);
-  saveSolved(solved);
-}
-
-function renderFlagCounts() {
-  const solved = loadSolved();
-  let totalFlags = 0;
-  let totalSolved = 0;
-  for (const [scenarioId, flags] of Object.entries(FLAGS)) {
-    const solvedForScenario = (solved[scenarioId] || []).filter((id) =>
-      flags.some((f) => f.id === id)
-    ).length;
-    totalFlags += flags.length;
-    totalSolved += solvedForScenario;
-    const el = document.querySelector(`[data-flag-count="${scenarioId}"]`);
-    if (el) {
-      el.textContent = `flags ${solvedForScenario}/${flags.length}`;
-      el.classList.toggle("complete", solvedForScenario === flags.length && flags.length > 0);
-    }
-  }
-  document.getElementById("flags-total").textContent = `${totalSolved} / ${totalFlags}`;
-}
-
-async function loadFlags() {
-  try {
-    const resp = await fetch("/api/flags");
-    FLAGS = await resp.json();
-    renderFlagCounts();
-  } catch (err) {
-    console.error("could not load flags", err);
-  }
-}
-
-const SHORT_LABELS = {
-  "ot-range-process-sim-1": "sim",
-  "ot-range-openplc-1": "plc",
-  "ot-range-hmi-1": "hmi",
-  "ot-range-historian-1": "hist",
-  "ot-range-postgres-1": "pg",
-  "ot-range-grafana-1": "graf",
-  "ot-range-router-1": "rtr",
+const CONTAINER_NAME_BY_NODE = {
+  "process-sim": "ot-range-process-sim-1",
+  openplc: "ot-range-openplc-1",
+  hmi: "ot-range-hmi-1",
+  historian: "ot-range-historian-1",
+  postgres: "ot-range-postgres-1",
+  grafana: "ot-range-grafana-1",
+  router: "ot-range-router-1",
 };
 
-function chip(ok, label) {
-  return `<span class="chip"><span class="dot ${ok ? "ok" : "bad"}"></span>${label}</span>`;
-}
+const SERVICE_GROUPS_DEF = [
+  {
+    title: "Control & Process",
+    items: [
+      { node: "process-sim", label: "Process Simulator" },
+      { node: "openplc", label: "OpenPLC Controller", portKey: "openplc_web", url: "http://localhost:8080" },
+      { node: "hmi", label: "HMI", portKey: "hmi", url: "http://localhost:8090" },
+    ],
+  },
+  {
+    title: "Data & Monitoring",
+    items: [
+      { node: "historian", label: "Historian" },
+      { node: "postgres", label: "PostgreSQL" },
+      { node: "grafana", label: "Grafana", portKey: "grafana", url: "http://localhost:3000" },
+    ],
+  },
+  {
+    title: "Network Security",
+    items: [{ node: "router", label: "Router / Sensor (Zeek + Suricata)" }],
+  },
+];
 
-function linkChip(ok, label, url) {
-  return `<span class="chip"><span class="dot ${ok ? "ok" : "bad"}"></span><a href="${url}" target="_blank">${label} ↗</a></span>`;
-}
+let FLAGS = {};
+let TOPOLOGY = null;
+let _lastStatus = null;
+let currentDrawerScenario = null;
+let consoleStartTime = null;
+let consoleTimerHandle = null;
+let _prereqUpdate = null;
 
-function renderStatus(data) {
-  const el = document.getElementById("status-groups");
-
-  if (!data.docker.any_present) {
-    el.innerHTML = '<span class="status-empty">Stack not running — click "Bring up"</span>';
-  } else {
-    const containers = data.docker.containers
-      .map((c) => chip(c.ok, SHORT_LABELS[c.name] || c.name))
-      .join("");
-    const ports = [
-      chip(data.docker.ports.modbus_openplc, "502"),
-      chip(data.docker.ports.modbus_sim, "5502"),
-    ].join("");
-    const links = [
-      linkChip(data.docker.ports.openplc_web, "OpenPLC", "http://localhost:8080"),
-      linkChip(data.docker.ports.hmi, "HMI", "http://localhost:8090"),
-      linkChip(data.docker.ports.grafana, "Grafana", "http://localhost:3000"),
-    ].join("");
-    el.innerHTML = `
-      <div class="status-group">${containers}</div>
-      <div class="strip-sep"></div>
-      <div class="status-group">${ports}</div>
-      <div class="strip-sep"></div>
-      <div class="status-group">${links}</div>
-    `;
-  }
-
-  const busy = data.busy;
-  document.getElementById("busy-note").style.display = busy ? "inline" : "none";
-  for (const btn of document.querySelectorAll("button.run-btn, #btn-up, #btn-down, #btn-reset")) {
-    btn.disabled = busy;
-  }
-}
+// ==================== status / readiness / services ====================
 
 async function refreshStatus() {
   try {
     const resp = await fetch("/api/status");
     const data = await resp.json();
-    renderStatus(data);
+    _lastStatus = data;
+    renderReadiness(data);
+    renderServiceGroups(data);
+    updateMapHealth(data);
+    updateButtonsBusyState(data.busy);
+    if (currentDrawerScenario) {
+      renderDrawerWorkspaceLinks(SCENARIOS_BY_ID[currentDrawerScenario]);
+      _prereqUpdate?.();
+    }
   } catch (err) {
     console.error("status refresh failed", err);
   }
 }
+
+function renderReadiness(data) {
+  let word;
+  let cls;
+  if (data.busy) {
+    word = "Busy";
+    cls = "warn";
+  } else if (!data.docker.any_present) {
+    word = "Offline";
+    cls = "bad";
+  } else if (data.docker.all_healthy) {
+    word = "Ready";
+    cls = "ok";
+  } else {
+    word = "Degraded";
+    cls = "warn";
+  }
+
+  document.getElementById("readiness-word").textContent = word;
+  document.getElementById("readiness-word-2").textContent = word;
+  document.getElementById("readiness-dot").className = `readiness-dot ${cls}`;
+  document.getElementById("readiness-dot-2").className = `readiness-dot large ${cls}`;
+  document.getElementById("header-busy").hidden = !data.busy;
+  document.getElementById("busy-note").hidden = !data.busy;
+
+  const healthy = data.docker.containers.filter((c) => c.ok).length;
+  document.getElementById("metric-containers").textContent = `${healthy}/${data.docker.containers.length}`;
+  const interfaceKeys = Object.keys(data.docker.ports);
+  const reachable = interfaceKeys.filter((k) => data.docker.ports[k]).length;
+  document.getElementById("metric-interfaces").textContent = `${reachable}/${interfaceKeys.length}`;
+  document.getElementById("metric-scenarios").textContent = `${SCENARIOS.length}`;
+}
+
+function updateButtonsBusyState(busy) {
+  for (const btn of document.querySelectorAll("button.run-btn, #btn-up, #btn-down, #btn-reset")) {
+    btn.disabled = busy;
+  }
+}
+
+function renderServiceGroups(data) {
+  const container = document.getElementById("service-groups");
+  if (!container) return;
+  if (!data.docker.any_present) {
+    container.innerHTML = '<p class="status-empty">Range is offline — click "Start Range" above.</p>';
+    return;
+  }
+  container.innerHTML = "";
+  for (const group of SERVICE_GROUPS_DEF) {
+    const groupEl = document.createElement("div");
+    groupEl.className = "service-group";
+    groupEl.innerHTML = `<h3>${group.title}</h3>`;
+    for (const item of group.items) {
+      const containerName = CONTAINER_NAME_BY_NODE[item.node];
+      const container_ = data.docker.containers.find((c) => c.name === containerName);
+      const ok = container_ ? container_.ok : false;
+      const stateText = container_
+        ? container_.health
+          ? `${container_.state}, ${container_.health}`
+          : container_.state
+        : "not found";
+      const row = document.createElement("div");
+      row.className = "service-item";
+      row.innerHTML = `
+        <span class="readiness-dot ${ok ? "ok" : "bad"}"></span>
+        <span class="service-name">${item.label}</span>
+        <span class="service-detail">${stateText}</span>
+        <span class="spacer"></span>
+      `;
+      if (item.portKey && data.docker.ports[item.portKey]) {
+        const link = document.createElement("a");
+        link.href = item.url;
+        link.target = "_blank";
+        link.rel = "noopener";
+        link.className = "workspace-link";
+        link.textContent = "Open ↗";
+        row.appendChild(link);
+      }
+      groupEl.appendChild(row);
+    }
+    container.appendChild(groupEl);
+  }
+}
+
+// ==================== stack actions ====================
+
+async function showAlert(title, message) {
+  const cancelBtn = document.getElementById("dialog-cancel");
+  cancelBtn.style.display = "none";
+  await showConfirmDialog({ title, message, confirmLabel: "OK" });
+  cancelBtn.style.display = "";
+}
+
+async function postJSON(url, body) {
+  const resp = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const data = await resp.json().catch(() => ({}));
+  if (!resp.ok) {
+    if (resp.status === 409) await showAlert("Busy", "Something is already running — wait for it to finish.");
+    else await showAlert("Error", data.error || resp.statusText);
+    return null;
+  }
+  return data;
+}
+
+function wireStackButtons() {
+  document.getElementById("btn-up").addEventListener("click", async () => {
+    const data = await postJSON("/api/stack/up");
+    if (data) streamJob(data.job_id, "Start Range (make up)");
+  });
+  document.getElementById("btn-down").addEventListener("click", async () => {
+    const ok = await showConfirmDialog({
+      title: "Stop the range?",
+      message:
+        "This tears down every container. Any scenario currently running is interrupted. Local training progress and scores are not affected.",
+      confirmLabel: "Stop range",
+      cancelLabel: "Cancel",
+      danger: true,
+    });
+    if (!ok) return;
+    const data = await postJSON("/api/stack/down");
+    if (data) streamJob(data.job_id, "Stop Range (make down)");
+  });
+  document.getElementById("btn-reset").addEventListener("click", async () => {
+    const ok = await showConfirmDialog({
+      title: "Reset the range environment?",
+      message:
+        "This wipes the historian database and Zeek/Suricata log volume, then restarts against the already-built images. It does not touch your local training progress or scores — use “Reset this attempt” inside a scenario for that instead.",
+      confirmLabel: "Reset range",
+      cancelLabel: "Cancel",
+      danger: true,
+    });
+    if (!ok) return;
+    const data = await postJSON("/api/stack/reset");
+    if (data) streamJob(data.job_id, "Reset Range (make reset)");
+  });
+  document.getElementById("btn-refresh").addEventListener("click", refreshStatus);
+}
+
+// ==================== console drawer ====================
 
 function openConsole(title) {
   document.getElementById("console-title").textContent = title;
@@ -127,16 +250,28 @@ function openConsole(title) {
   badge.textContent = "running";
   badge.className = "status-badge running";
   document.getElementById("console-body").textContent = "";
-  document.getElementById("console-wrap").style.display = "flex";
+  const wrap = document.getElementById("console-wrap");
+  wrap.hidden = false;
+  wrap.classList.remove("collapsed");
+  consoleStartTime = Date.now();
+  clearInterval(consoleTimerHandle);
+  consoleTimerHandle = setInterval(updateConsoleElapsed, 1000);
+  updateConsoleElapsed();
+}
+
+function updateConsoleElapsed() {
+  if (!consoleStartTime) return;
+  document.getElementById("console-elapsed").textContent = `${Math.floor((Date.now() - consoleStartTime) / 1000)}s`;
 }
 
 function appendConsoleLine(text) {
   const body = document.getElementById("console-body");
-  body.textContent += text + "\n";
-  body.scrollTop = body.scrollHeight;
+  body.textContent += `${text}\n`;
+  if (document.getElementById("console-autoscroll").checked) body.scrollTop = body.scrollHeight;
 }
 
 function finishConsole(returncode) {
+  clearInterval(consoleTimerHandle);
   const badge = document.getElementById("console-badge");
   const ok = returncode === 0 || returncode === "0";
   badge.textContent = ok ? "done" : `failed (${returncode})`;
@@ -158,169 +293,353 @@ function streamJob(jobId, title) {
   };
 }
 
-async function postJSON(url, body) {
-  const resp = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  const data = await resp.json().catch(() => ({}));
-  if (!resp.ok) {
-    if (resp.status === 409) {
-      alert("Something is already running — wait for it to finish.");
-    } else {
-      alert(`Error: ${data.error || resp.statusText}`);
-    }
-    return null;
-  }
-  return data;
-}
-
-function wireStackButtons() {
-  document.getElementById("btn-up").addEventListener("click", async () => {
-    const data = await postJSON("/api/stack/up");
-    if (data) streamJob(data.job_id, "make up");
-  });
-  document.getElementById("btn-down").addEventListener("click", async () => {
-    if (!confirm("Tear down the stack? All containers will stop.")) return;
-    const data = await postJSON("/api/stack/down");
-    if (data) streamJob(data.job_id, "make down");
-  });
-  document.getElementById("btn-reset").addEventListener("click", async () => {
-    if (!confirm("Reset wipes postgres and zeek-log state. Continue?")) return;
-    const data = await postJSON("/api/stack/reset");
-    if (data) streamJob(data.job_id, "make reset");
-  });
-  document.getElementById("btn-refresh").addEventListener("click", refreshStatus);
+function wireConsole() {
   document.getElementById("console-close").addEventListener("click", () => {
-    document.getElementById("console-wrap").style.display = "none";
+    document.getElementById("console-wrap").hidden = true;
+    clearInterval(consoleTimerHandle);
+  });
+  document.getElementById("console-collapse").addEventListener("click", (ev) => {
+    const wrap = document.getElementById("console-wrap");
+    wrap.classList.toggle("collapsed");
+    ev.target.textContent = wrap.classList.contains("collapsed") ? "▸" : "▾";
+  });
+  document.getElementById("console-clear").addEventListener("click", () => {
+    document.getElementById("console-body").textContent = "";
   });
 }
 
-function wireScenarioButtons() {
-  for (const btn of document.querySelectorAll(".run-btn")) {
-    btn.addEventListener("click", async () => {
-      const scenario = btn.dataset.scenario;
-      const select = document.querySelector(`select[data-scenario="${scenario}"]`);
-      const modeIndex = parseInt(select.value, 10);
-      const data = await postJSON("/api/run", { scenario, mode_index: modeIndex });
-      if (data) streamJob(data.job_id, `${scenario}: ${select.options[select.selectedIndex].text}`);
-    });
-  }
-}
+// ==================== document viewer modal ====================
 
-function openModal(title) {
-  document.getElementById("modal-title").textContent = title;
-  document.getElementById("modal-overlay").style.display = "flex";
-}
-
-function wireDocLinks() {
+function openDocModal(scenarioId, docKey) {
+  document.getElementById("modal-title").textContent = DOC_LABELS[docKey];
+  document.getElementById("modal-subtitle").textContent = `${scenarioId} — ${SCENARIOS_BY_ID[scenarioId].title}`;
   const body = document.getElementById("modal-body");
-  for (const link of document.querySelectorAll(".doc-links a")) {
-    link.addEventListener("click", async () => {
-      const scenario = link.dataset.scenario;
-      const doc = link.dataset.doc;
-      openModal(`${scenario} — ${link.textContent}`);
-      body.textContent = "loading…";
-      body.style.whiteSpace = "pre-wrap";
-      const resp = await fetch(`/api/docs/${scenario}/${doc}`);
-      body.textContent = resp.ok ? await resp.text() : "not found";
+  body.textContent = "Loading…";
+  const overlay = document.getElementById("modal-overlay");
+  overlay.hidden = false;
+  overlay._releaseFocus = trapFocus(document.getElementById("modal-box"));
+
+  fetch(`/api/docs/${scenarioId}/${docKey}`)
+    .then((r) => (r.ok ? r.text() : Promise.resolve("Not found.")))
+    .then((text) => {
+      body.textContent = text;
     });
+}
+
+async function tryOpenDoc(scenarioId, docKey) {
+  ensureAttemptStarted(scenarioId);
+  if (isSolutionDoc(docKey)) {
+    const state = TrainingStore.getScenario(scenarioId);
+    if (!state.solutionLocked && state.mode !== "guided") {
+      const ok = await confirmRevealSolution();
+      if (!ok) return;
+    }
   }
-  document.getElementById("modal-close").addEventListener("click", () => {
-    document.getElementById("modal-overlay").style.display = "none";
+  markDocOpened(scenarioId, docKey);
+  recomputeStatus(scenarioId, FLAGS[scenarioId] || []);
+  renderLifecycleBadges(FLAGS);
+  renderProgressSection(SCENARIOS, FLAGS, exportOneScenarioReport);
+  updateDrawerLifecycleBadge(scenarioId);
+  if (currentDrawerScenario === scenarioId) refreshDrawerFlags();
+  openDocModal(scenarioId, docKey);
+}
+
+function wireModalClose() {
+  const overlay = document.getElementById("modal-overlay");
+  const close = () => {
+    overlay.hidden = true;
+    overlay._releaseFocus?.();
+  };
+  document.getElementById("modal-close").addEventListener("click", close);
+  overlay.addEventListener("click", (ev) => {
+    if (ev.target === overlay) close();
   });
-  document.getElementById("modal-overlay").addEventListener("click", (ev) => {
-    if (ev.target.id === "modal-overlay") ev.target.style.display = "none";
+  document.getElementById("modal-copy").addEventListener("click", () => {
+    navigator.clipboard?.writeText(document.getElementById("modal-body").textContent);
+  });
+  document.addEventListener("keydown", (ev) => {
+    if (ev.key === "Escape" && !overlay.hidden) close();
   });
 }
 
-function renderFlagsModal(scenarioId) {
-  const body = document.getElementById("modal-body");
-  const flags = FLAGS[scenarioId] || [];
-  const solved = loadSolved()[scenarioId] || [];
+// ==================== scenario detail drawer ====================
 
-  openModal(`${scenarioId} — Flags`);
-  body.innerHTML = "";
+function updateDrawerLifecycleBadge(scenarioId) {
+  const badge = document.getElementById("drawer-lifecycle-badge");
+  if (!badge || currentDrawerScenario !== scenarioId) return;
+  const state = TrainingStore.getScenario(scenarioId);
+  badge.textContent = lifecycleLabel(state);
+  badge.className = `lifecycle-badge status-${state.status}`;
+}
 
-  for (const flag of flags) {
-    const row = document.createElement("div");
-    row.className = "flag-row";
-    const isSolved = solved.includes(flag.id);
-    row.innerHTML = `
-      <div class="flag-prompt">${flag.prompt}</div>
-      <div class="flag-input-row">
-        <input type="text" placeholder="your answer" ${isSolved ? 'class="correct"' : ""}
-               value="${isSolved ? "✓ captured" : ""}" ${isSolved ? "disabled" : ""}>
-        <button class="btn-primary check-btn">Check</button>
-        <span class="flag-status ${isSolved ? "correct" : ""}">${isSolved ? "✓" : ""}</span>
+function openDrawer(scenarioId) {
+  currentDrawerScenario = scenarioId;
+  const meta = SCENARIOS_BY_ID[scenarioId];
+
+  const content = document.getElementById("drawer-content");
+  content.innerHTML = `
+    <div class="drawer-subtitle">${scenarioId}</div>
+    <h2 class="drawer-title">${meta.title}</h2>
+    <span class="lifecycle-badge" id="drawer-lifecycle-badge"></span>
+    <p class="meta-line" style="margin-top:8px">${meta.hook}</p>
+
+    <div class="drawer-section">
+      <h4>Threat summary</h4>
+      <p class="meta-line"><b>Impact:</b> ${meta.impact}</p>
+      <p class="meta-line"><b>Caught by:</b> ${meta.caught_by}</p>
+      <span class="severity severity-${meta.severity}">${meta.severity}</span>
+      ${meta.severity === "critical" ? '<div class="warning-banner">This scenario causes real simulated process damage (tank overflow, pump damage) when run. Simulated environment only — see SECURITY.md.</div>' : ""}
+    </div>
+
+    <div class="drawer-section">
+      <h4>Learning objectives</h4>
+      <ul class="objective-list">${meta.objectives.map((o) => `<li>${o}</li>`).join("")}</ul>
+    </div>
+
+    <div class="drawer-section" id="drawer-mode-section"></div>
+
+    <div class="drawer-section">
+      <h4>Run scenario</h4>
+      <div class="row">
+        <select id="drawer-mode-select">
+          ${meta.modes.map((m, i) => `<option value="${i}">${m.label}</option>`).join("")}
+        </select>
+        <button class="btn-primary run-btn" id="drawer-run-btn">Run</button>
       </div>
-      ${flag.hint ? `<div class="flag-hint"><button class="link hint-btn">hint</button><span class="hint-text" style="display:none"> ${flag.hint}</span></div>` : ""}
-    `;
-    body.appendChild(row);
+      <div id="drawer-prereq"></div>
+    </div>
 
-    const input = row.querySelector("input");
-    const status = row.querySelector(".flag-status");
-    const checkBtn = row.querySelector(".check-btn");
-    const hintBtn = row.querySelector(".hint-btn");
+    <div class="drawer-section">
+      <h4>Documentation</h4>
+      <div class="doc-tabs">
+        <button class="doc-tab" data-doc="briefing">Briefing</button>
+        <button class="doc-tab" data-doc="detection">Detection</button>
+        <button class="doc-tab" data-doc="expected-impact">Expected impact</button>
+        <button class="doc-tab solution-doc" data-doc="answer-key">Answer key 🔒</button>
+      </div>
+    </div>
 
-    checkBtn.addEventListener("click", async () => {
-      const answer = input.value.trim();
-      if (!answer) return;
-      const resp = await fetch("/api/flags/check", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scenario: scenarioId, flag_id: flag.id, answer }),
-      });
-      const data = await resp.json();
-      if (data.correct) {
-        markSolved(scenarioId, flag.id);
-        input.classList.add("correct");
-        input.disabled = true;
-        status.textContent = "✓";
-        status.className = "flag-status correct";
-        renderFlagCounts();
-      } else {
-        status.textContent = "✕";
-        status.className = "flag-status wrong";
+    <div class="drawer-section">
+      <h4>Investigation flags</h4>
+      <div id="drawer-flags"></div>
+    </div>
+
+    <div class="drawer-section">
+      <h4>Investigation workspace</h4>
+      <div class="workspace-links" id="drawer-workspace-links"></div>
+    </div>
+
+    <div class="drawer-section">
+      <h4>Notes (local only, never treated as a flag answer)</h4>
+      <textarea class="notes-field" id="drawer-notes"></textarea>
+    </div>
+
+    <div class="drawer-section">
+      <button class="btn-secondary-danger" id="drawer-reset-btn">Reset this attempt</button>
+    </div>
+  `;
+
+  renderModeSelector(document.getElementById("drawer-mode-section"), scenarioId, refreshDrawerFlags);
+  wireNotesField(document.getElementById("drawer-notes"), scenarioId);
+  refreshDrawerFlags();
+  renderDrawerWorkspaceLinks(meta);
+  renderDrawerPrereq(meta);
+  updateDrawerLifecycleBadge(scenarioId);
+
+  content.querySelectorAll(".doc-tab").forEach((btn) => {
+    btn.addEventListener("click", () => tryOpenDoc(scenarioId, btn.dataset.doc));
+  });
+
+  document.getElementById("drawer-run-btn").addEventListener("click", async () => {
+    const modeIndex = Number.parseInt(document.getElementById("drawer-mode-select").value, 10);
+    ensureAttemptStarted(scenarioId);
+    renderLifecycleBadges(FLAGS);
+    updateDrawerLifecycleBadge(scenarioId);
+    const data = await postJSON("/api/run", { scenario: scenarioId, mode_index: modeIndex });
+    if (data) streamJob(data.job_id, `${scenarioId}: ${meta.modes[modeIndex].label}`);
+  });
+
+  document.getElementById("drawer-reset-btn").addEventListener("click", async () => {
+    const ok = await confirmResetAttempt();
+    if (!ok) return;
+    TrainingStore.resetScenario(scenarioId);
+    renderLifecycleBadges(FLAGS);
+    renderProgressSection(SCENARIOS, FLAGS, exportOneScenarioReport);
+    renderModeSelector(document.getElementById("drawer-mode-section"), scenarioId, refreshDrawerFlags);
+    refreshDrawerFlags();
+    updateDrawerLifecycleBadge(scenarioId);
+    document.getElementById("drawer-notes").value = "";
+  });
+
+  const overlay = document.getElementById("drawer-overlay");
+  overlay.hidden = false;
+  overlay._releaseFocus = trapFocus(document.getElementById("scenario-drawer"));
+
+  const mapSelect = document.getElementById("map-scenario-select");
+  if (mapSelect) {
+    mapSelect.value = scenarioId;
+    setMapOverlay(scenarioId);
+  }
+}
+
+function refreshDrawerFlags() {
+  const container = document.getElementById("drawer-flags");
+  if (!container || !currentDrawerScenario) return;
+  renderFlagsSection(container, currentDrawerScenario, FLAGS[currentDrawerScenario] || [], () => {
+    renderLifecycleBadges(FLAGS);
+    renderProgressSection(SCENARIOS, FLAGS, exportOneScenarioReport);
+    updateDrawerLifecycleBadge(currentDrawerScenario);
+  });
+}
+
+function renderDrawerWorkspaceLinks(meta) {
+  const container = document.getElementById("drawer-workspace-links");
+  if (!container) return;
+  const links = [];
+  const ports = _lastStatus?.docker?.ports;
+  if (ports?.hmi) links.push({ label: "HMI ↗", url: "http://localhost:8090" });
+  if (ports?.openplc_web) links.push({ label: "OpenPLC web UI ↗", url: "http://localhost:8080" });
+  if (ports?.grafana) links.push({ label: "Grafana ↗", url: "http://localhost:3000" });
+  container.innerHTML =
+    links.map((l) => `<a class="workspace-link" href="${l.url}" target="_blank" rel="noopener">${l.label}</a>`).join("") +
+    '<a class="workspace-link" href="#network-map">Network map</a>' +
+    '<a class="workspace-link" href="#console-section">Console</a>';
+}
+
+function renderDrawerPrereq(meta) {
+  const banner = document.getElementById("drawer-prereq");
+  const select = document.getElementById("drawer-mode-select");
+  const runBtn = document.getElementById("drawer-run-btn");
+  _prereqUpdate = () => {
+    const mode = meta.modes[Number.parseInt(select.value, 10)];
+    const ready = _lastStatus?.docker?.all_healthy;
+    if (mode.requires_docker && !ready) {
+      banner.innerHTML =
+        '<div class="prereq-banner">This mode needs the range running (Docker stack up and healthy). <button class="btn-primary" id="prereq-start-btn">Start Range</button></div>';
+      banner.querySelector("#prereq-start-btn").addEventListener("click", () => document.getElementById("btn-up").click());
+      runBtn.disabled = true;
+    } else {
+      banner.innerHTML = "";
+      runBtn.disabled = _lastStatus?.busy || false;
+    }
+  };
+  select.addEventListener("change", _prereqUpdate);
+  _prereqUpdate();
+}
+
+function wireDrawerClose() {
+  const overlay = document.getElementById("drawer-overlay");
+  const close = () => {
+    overlay.hidden = true;
+    overlay._releaseFocus?.();
+    currentDrawerScenario = null;
+    _prereqUpdate = null;
+  };
+  document.getElementById("drawer-close").addEventListener("click", close);
+  overlay.addEventListener("click", (ev) => {
+    if (ev.target === overlay) close();
+  });
+  document.addEventListener("keydown", (ev) => {
+    if (ev.key === "Escape" && !overlay.hidden) close();
+  });
+}
+
+function wireScenarioCards() {
+  document.querySelectorAll(".scenario-card").forEach((card) => {
+    const open = () => openDrawer(card.dataset.scenario);
+    card.addEventListener("click", open);
+    card.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter" || ev.key === " ") {
+        ev.preventDefault();
+        open();
       }
     });
-    input.addEventListener("keydown", (ev) => {
-      if (ev.key === "Enter") checkBtn.click();
-    });
-    if (hintBtn) {
-      hintBtn.addEventListener("click", () => {
-        row.querySelector(".hint-text").style.display = "inline";
-        hintBtn.style.display = "none";
-      });
-    }
-  }
+  });
 }
 
-function wireFlagsLinks() {
-  for (const btn of document.querySelectorAll(".flags-link")) {
-    btn.addEventListener("click", () => renderFlagsModal(btn.dataset.scenario));
-  }
+// ==================== flags data + progress/reports ====================
+
+async function loadFlags() {
+  const resp = await fetch("/api/flags");
+  FLAGS = await resp.json();
+  renderLifecycleBadges(FLAGS);
+  renderProgressSection(SCENARIOS, FLAGS, exportOneScenarioReport);
 }
 
-function wireAccordion() {
-  for (const head of document.querySelectorAll(".scenario-row-head")) {
-    head.addEventListener("click", () => {
-      const scenario = head.dataset.toggle;
-      const row = head.closest(".scenario-row");
-      const body = document.getElementById(`body-${scenario}`);
-      const isOpen = !body.hidden;
-      body.hidden = isOpen;
-      row.classList.toggle("open", !isOpen);
-    });
-  }
+function exportOneScenarioReport(scenarioId) {
+  const report = buildCompletionReport(scenarioId, SCENARIOS_BY_ID[scenarioId], FLAGS[scenarioId] || []);
+  exportJSON(report, `ot-range-${scenarioId}-report.json`);
 }
 
-wireStackButtons();
-wireScenarioButtons();
-wireDocLinks();
-wireFlagsLinks();
-wireAccordion();
-refreshStatus();
-loadFlags();
-setInterval(refreshStatus, 4000);
+function wireProgressExports() {
+  document.getElementById("export-course-json").addEventListener("click", () => {
+    exportJSON(buildCourseReport(SCENARIOS, FLAGS), "ot-range-course-report.json");
+  });
+  document.getElementById("export-course-print").addEventListener("click", () => {
+    const report = buildCourseReport(SCENARIOS, FLAGS);
+    openPrintableReport(report.scenarios, "Cedar Hollow OT Range — Course Progress Report");
+  });
+}
+
+// ==================== network map ====================
+
+async function loadTopology() {
+  const resp = await fetch("/api/topology");
+  TOPOLOGY = await resp.json();
+  initNetworkMap(TOPOLOGY);
+}
+
+function wireMapControls() {
+  document.getElementById("map-scenario-select").addEventListener("change", (ev) => setMapOverlay(ev.target.value));
+  document.getElementById("map-toggle-ports").addEventListener("click", (ev) => {
+    const showing = toggleMapPorts();
+    ev.target.textContent = `Ports/protocols: ${showing ? "on" : "off"}`;
+  });
+  document.getElementById("map-reset-view").addEventListener("click", resetMapView);
+  document.getElementById("map-refresh-health").addEventListener("click", refreshStatus);
+}
+
+// ==================== sidebar nav ====================
+
+function wireSidebarNav() {
+  const links = [...document.querySelectorAll(".nav-link")];
+  const sections = links.map((l) => document.getElementById(l.dataset.nav)).filter(Boolean);
+  const observer = new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        if (entry.isIntersecting) {
+          links.forEach((l) => l.classList.toggle("active", l.dataset.nav === entry.target.id));
+        }
+      }
+    },
+    { rootMargin: "-40% 0px -55% 0px" }
+  );
+  sections.forEach((s) => observer.observe(s));
+
+  document.getElementById("mobile-menu-btn")?.addEventListener("click", () => {
+    document.querySelector(".sidebar").classList.toggle("open");
+  });
+  links.forEach((l) =>
+    l.addEventListener("click", () => document.querySelector(".sidebar").classList.remove("open"))
+  );
+}
+
+// ==================== init ====================
+
+async function init() {
+  wireStackButtons();
+  wireConsole();
+  wireModalClose();
+  wireDrawerClose();
+  wireScenarioCards();
+  wireProgressExports();
+  wireMapControls();
+  wireSidebarNav();
+  initInstructorPanel(SCENARIOS, () => window.location.reload());
+
+  await Promise.all([loadFlags(), loadTopology()]);
+  await refreshStatus();
+  setInterval(refreshStatus, 4000);
+}
+
+init();

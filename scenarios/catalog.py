@@ -8,10 +8,23 @@ control panel) so the two never drift out of sync with each other.
 from __future__ import annotations
 
 import socket
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+
+# Referenced by id from each Scenario's `objectives` and each Flag's
+# `objective_ids` (scenarios/flags.py) — one shared vocabulary so a
+# flag's objective always resolves to real text, not a dangling string.
+LEARNING_OBJECTIVES = {
+    "obj-recon": "Distinguish reconnaissance from normal HMI polling",
+    "obj-unauth-cmd": "Identify unauthorized Modbus function usage",
+    "obj-correlate": "Correlate process behavior with network telemetry",
+    "obj-view-manip": "Detect discrepancies between physical state and HMI presentation",
+    "obj-logic-mod": "Identify changes to PLC control logic",
+    "obj-blind-spot": "Recognize monitoring blind spots",
+    "obj-impact": "Explain the physical consequence of a cyber action",
+}
 
 
 @dataclass
@@ -29,6 +42,14 @@ class Scenario:
     impact: str
     caught_by: str
     modes: list[Mode]
+    # "informational" | "critical" — drawn from this scenario's own
+    # detection severities in docs/coverage-matrix.md, not assigned
+    # independently. S01's highest rule is "high", not "critical" —
+    # the only scenario with no process impact — everything else here
+    # reaches the same physical endpoint (tank overflow) and is rated
+    # "critical" in coverage-matrix.md.
+    severity: str = "critical"
+    objectives: list[str] = field(default_factory=list)
 
     @property
     def dirname(self) -> Path:
@@ -43,6 +64,8 @@ SCENARIOS = [
         "swear it was a normal shift. Figure out what the sensor saw.",
         impact="None on the process — that's the lesson: recon looks quiet.",
         caught_by="4 detection rules (unauthorized source, point/unit-ID sweeps, exception spikes)",
+        severity="informational",
+        objectives=["obj-recon", "obj-correlate"],
         modes=[
             Mode("loopback (fast, self-contained)", ["bash", "scenarios/run_scenario.sh", "S01"]),
             Mode(
@@ -59,6 +82,8 @@ SCENARIOS = [
         "faulted, and the operator swears he never touched manual mode.",
         impact="Tank overflows, pump destroys itself running dry/blocked.",
         caught_by="MODBUS_UNAUTHORIZED_WRITE (critical)",
+        severity="critical",
+        objectives=["obj-unauth-cmd", "obj-correlate", "obj-impact"],
         modes=[
             Mode("loopback (fast, self-contained)", ["bash", "scenarios/run_scenario.sh", "S03"]),
             Mode(
@@ -76,6 +101,8 @@ SCENARIOS = [
         impact="Tank overflows for real while every screen stays calm.",
         caught_by="MODBUS_VIEW_MANIPULATION (critical) — hardwired float "
         "vs. spoofed transmitter, source-independent",
+        severity="critical",
+        objectives=["obj-view-manip", "obj-correlate"],
         modes=[
             Mode("loopback (fast, self-contained)", ["bash", "scenarios/run_scenario.sh", "S05"]),
         ],
@@ -92,6 +119,8 @@ SCENARIOS = [
         caught_by="Not detected — the compromise is over HTTP (OpenPLC's "
         "web UI), which nothing in this range inspects. That gap is the "
         "scenario's own teaching point.",
+        severity="critical",
+        objectives=["obj-logic-mod", "obj-blind-spot", "obj-impact"],
         modes=[
             Mode(
                 "OpenPLC web UI + Modbus, live (requires `make up`)",

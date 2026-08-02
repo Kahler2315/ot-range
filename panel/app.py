@@ -25,9 +25,11 @@ from pathlib import Path
 
 from flask import Flask, Response, abort, jsonify, render_template, request
 
-from scenarios.catalog import SCENARIOS, SCENARIOS_BY_ID
+from panel.topology import get_topology
+from scenarios.catalog import LEARNING_OBJECTIVES, SCENARIOS, SCENARIOS_BY_ID
 from scenarios.flags import FLAGS_BY_SCENARIO
 from scenarios.flags import check as check_flag
+from scenarios.scoring import hint_cost
 from tools.status import docker_container_status, http_ok, tcp_open
 
 LOG = logging.getLogger("ot_range.panel")
@@ -43,6 +45,14 @@ DOC_FILES = {
     "detection": "detection.md",
     "expected-impact": "expected-impact.md",
 }
+
+# Which doc keys contain accepted flag answers, not just teaching
+# narrative — opening one of these is what triggers the training
+# lifecycle's solution-reveal lock on the frontend (panel/static/
+# training.js). detection.md and expected-impact.md explain mechanism
+# without stating answers directly, confirmed by reading all four
+# scenarios' actual docs — they stay unlocked during investigation.
+SOLUTION_DOCS = {"answer-key"}
 
 STACK_COMMANDS = {
     "up": ["make", "up"],
@@ -169,13 +179,19 @@ def index():
             "hook": s.hook,
             "impact": s.impact,
             "caught_by": s.caught_by,
+            "severity": s.severity,
+            "objectives": [LEARNING_OBJECTIVES[oid] for oid in s.objectives],
             "modes": [
                 {"label": m.label, "requires_docker": m.requires_docker_stack} for m in s.modes
             ],
         }
         for s in SCENARIOS
     ]
-    return render_template("index.html", scenarios=scenarios)
+    return render_template(
+        "index.html",
+        scenarios=scenarios,
+        solution_docs=sorted(SOLUTION_DOCS),
+    )
 
 
 @app.route("/api/status")
@@ -248,16 +264,44 @@ def api_docs(scenario_id: str, doc: str):
 
 @app.route("/api/flags")
 def api_flags():
-    # Prompts and hints only — never the accepted answers. Checked
-    # server-side in api_flags_check so answers never sit in page
-    # source; that's the whole point of routing this through an API
-    # instead of just rendering FLAGS_BY_SCENARIO into the template.
+    # Prompts, points, and hint *costs* only — never hint text, never
+    # accepted answers. Checked server-side in api_flags_check so
+    # answers never sit in page source; hint text is only ever sent
+    # by api_flags_hint, one level at a time, when a student actually
+    # reveals it.
     return jsonify(
         {
-            scenario_id: [{"id": f.id, "prompt": f.prompt, "hint": f.hint} for f in flags]
+            scenario_id: [
+                {
+                    "id": f.id,
+                    "prompt": f.prompt,
+                    "points": f.points,
+                    "hintCosts": [
+                        hint_cost(f.points, level) for level in range(1, len(f.hints) + 1)
+                    ],
+                    "category": f.category,
+                    "evidenceSource": f.evidence_source,
+                    "objectives": [LEARNING_OBJECTIVES[oid] for oid in f.objective_ids],
+                }
+                for f in flags
+            ]
             for scenario_id, flags in FLAGS_BY_SCENARIO.items()
         }
     )
+
+
+@app.route("/api/flags/<scenario_id>/<flag_id>/hint/<int:level>")
+def api_flags_hint(scenario_id: str, flag_id: str, level: int):
+    flags = FLAGS_BY_SCENARIO.get(scenario_id, [])
+    flag = next((f for f in flags if f.id == flag_id), None)
+    if flag is None or level < 1 or level > len(flag.hints):
+        abort(404)
+    return jsonify(text=flag.hints[level - 1].text, cost=hint_cost(flag.points, level))
+
+
+@app.route("/api/topology")
+def api_topology():
+    return jsonify(get_topology())
 
 
 @app.route("/api/flags/check", methods=["POST"])

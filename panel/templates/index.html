@@ -3,301 +3,260 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>OT Range — Control Panel</title>
-  <style>
-    :root {
-      --bg: #0b0c0e;
-      --panel: #16181c;
-      --panel-2: #1c1f24;
-      --border: #292d34;
-      --text: #eceff2;
-      --text-dim: #98a1ad;
-      --text-faint: #565d68;
-      --accent: #f0a020;
-      --accent-soft: rgba(240, 160, 32, 0.13);
-      --good: #3ecf8e;
-      --bad: #ef5b5b;
-      --mono: 'Cascadia Code', 'JetBrains Mono', Consolas, monospace;
-      --sans: -apple-system, 'Segoe UI', Inter, Arial, sans-serif;
-    }
-    * { box-sizing: border-box; }
-    html { scrollbar-color: var(--border) transparent; }
-    body {
-      background-color: var(--bg);
-      background-image:
-        linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
-      background-size: 28px 28px;
-      color: var(--text); font-family: var(--sans);
-      margin: 0; padding: 0 0 130px;
-    }
-    a { color: var(--accent); }
-
-    header {
-      position: sticky; top: 0; z-index: 5;
-      background: rgba(11, 12, 14, 0.88); backdrop-filter: blur(10px);
-      border-bottom: 1px solid var(--border);
-      padding: 14px 28px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
-    }
-    .brand { display: flex; align-items: center; gap: 10px; }
-    .brand .wordmark {
-      font-family: var(--mono); font-weight: 700; letter-spacing: 0.04em; font-size: 1rem;
-      color: #fff;
-    }
-    .brand .tagline {
-      font-size: 0.74rem; color: var(--text-faint); border-left: 1px solid var(--border);
-      padding-left: 10px; margin-left: 2px;
-    }
-    header .spacer { flex: 1; }
-    .flags-chip {
-      display: flex; align-items: center; gap: 7px; background: var(--panel);
-      border: 1px solid var(--border); border-radius: 7px; padding: 6px 12px;
-      font-size: 0.82rem; font-family: var(--mono); color: var(--text-dim);
-    }
-    .flags-chip b { color: var(--accent); font-weight: 700; }
-
-    main { padding: 22px 28px; max-width: 1180px; margin: 0 auto; }
-    .security-note {
-      font-size: 0.78rem; color: var(--text-faint); margin: 0 0 18px;
-    }
-    .security-note a { color: var(--text-faint); text-decoration: underline; }
-
-    .eyebrow {
-      font-family: var(--mono); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em;
-      color: var(--text-faint); font-weight: 600; margin: 0 0 10px;
-    }
-
-    /* --- unified control strip --- */
-    .control-strip {
-      background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
-      padding: 12px 16px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
-      margin-bottom: 26px;
-    }
-    .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
-    button {
-      font-family: var(--sans); font-size: 0.82rem; font-weight: 600; border: none;
-      border-radius: 6px; padding: 8px 14px; cursor: pointer; transition: all 0.12s;
-    }
-    button:disabled { opacity: 0.35; cursor: not-allowed; }
-    button:not(:disabled):hover { filter: brightness(1.12); }
-    .btn-primary { background: var(--accent); color: #211502; }
-    .btn-danger { background: var(--panel-2); color: var(--bad); border: 1px solid #3a2426; }
-    .btn-warn { background: var(--panel-2); color: #e0a83e; border: 1px solid #3a2f1c; }
-    .btn-ghost { background: transparent; color: var(--text-dim); border: 1px solid var(--border); }
-    .busy-note { color: var(--accent); font-size: 0.8rem; display: none; font-family: var(--mono); }
-
-    .strip-sep { width: 1px; align-self: stretch; background: var(--border); }
-    .status-groups { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; font-family: var(--mono); }
-    .status-group { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-    .chip {
-      display: inline-flex; align-items: center; gap: 5px; font-size: 0.74rem;
-      padding: 3px 8px; border-radius: 5px; background: var(--panel-2); color: var(--text-dim);
-      white-space: nowrap;
-    }
-    .chip a { color: inherit; text-decoration: none; }
-    .chip a:hover { color: var(--accent); }
-    .dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; background: var(--text-faint); }
-    .dot.ok { background: var(--good); box-shadow: 0 0 5px 0 rgba(62,207,142,0.6); }
-    .dot.bad { background: var(--bad); box-shadow: 0 0 5px 0 rgba(239,91,91,0.5); }
-    .status-empty { font-size: 0.78rem; color: var(--text-faint); font-family: var(--sans); }
-
-    /* --- scenario list --- */
-    .scenario-list { display: flex; flex-direction: column; gap: 6px; }
-    .scenario-row {
-      background: var(--panel); border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
-    }
-    .scenario-row-head {
-      display: flex; align-items: center; gap: 12px; padding: 12px 16px; cursor: pointer;
-      user-select: none;
-    }
-    .scenario-row-head:hover { background: var(--panel-2); }
-    .chevron {
-      font-family: var(--mono); color: var(--text-faint); font-size: 0.7rem; width: 10px;
-      transition: transform 0.15s; flex-shrink: 0;
-    }
-    .scenario-row.open .chevron { transform: rotate(90deg); }
-    .sid {
-      font-family: var(--mono); font-size: 0.72rem; font-weight: 700; letter-spacing: 0.05em;
-      color: var(--text-dim); background: var(--panel-2); padding: 3px 7px; border-radius: 4px;
-      flex-shrink: 0;
-    }
-    .stitle { font-weight: 600; font-size: 0.92rem; flex-shrink: 0; }
-    .row-hook {
-      color: var(--text-faint); font-size: 0.82rem; overflow: hidden; text-overflow: ellipsis;
-      white-space: nowrap; flex: 1; min-width: 0;
-    }
-    .row-flags {
-      font-family: var(--mono); font-size: 0.72rem; color: var(--text-faint);
-      background: var(--panel-2); padding: 3px 8px; border-radius: 10px; flex-shrink: 0;
-    }
-    .row-flags.complete { color: var(--good); }
-
-    .scenario-row-body {
-      padding: 4px 16px 18px 38px; border-top: 1px solid var(--border);
-      display: flex; flex-direction: column; gap: 10px;
-    }
-    .scenario-row-body[hidden] { display: none; }
-    .meta { font-size: 0.84rem; color: var(--text-dim); line-height: 1.55; }
-    .meta b { color: var(--text); font-weight: 600; }
-    .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 2px; }
-    select {
-      background: var(--bg); color: var(--text); border: 1px solid var(--border);
-      border-radius: 6px; padding: 7px 10px; font-size: 0.8rem; font-family: var(--sans);
-      flex: 1; min-width: 140px;
-    }
-    .doc-links { display: flex; gap: 14px; font-size: 0.78rem; flex-wrap: wrap; }
-    .doc-links a, .doc-links button.link {
-      cursor: pointer; background: none; border: none; padding: 0; font: inherit;
-      color: var(--text-dim); text-decoration: none;
-    }
-    .doc-links a:hover, .doc-links button.link:hover { color: var(--accent); }
-    .doc-links button.link.flags-link { color: var(--accent); font-weight: 600; }
-
-    #console-wrap {
-      position: fixed; left: 0; right: 0; bottom: 0; background: #08090a;
-      border-top: 1px solid var(--border); box-shadow: 0 -8px 30px rgba(0,0,0,0.5);
-      max-height: 42vh; display: none; flex-direction: column; z-index: 8;
-    }
-    #console-header {
-      display: flex; align-items: center; gap: 12px; padding: 9px 20px;
-      background: var(--panel); font-size: 0.8rem; color: var(--text-dim); font-family: var(--mono);
-      border-bottom: 1px solid var(--border);
-    }
-    #console-header .status-badge {
-      padding: 2px 10px; border-radius: 4px; font-weight: 700; font-size: 0.7rem;
-    }
-    .status-badge.running { background: var(--accent-soft); color: var(--accent); }
-    .status-badge.ok { background: rgba(62,207,142,0.13); color: var(--good); }
-    .status-badge.fail { background: rgba(239,91,91,0.13); color: var(--bad); }
-    #console-close { margin-left: auto; background: none; color: var(--text-faint); padding: 2px 8px; }
-    #console-body {
-      overflow-y: auto; padding: 14px 20px; font-family: var(--mono);
-      font-size: 0.8rem; white-space: pre-wrap; line-height: 1.55; color: #d7dee6;
-    }
-
-    #modal-overlay {
-      display: none; position: fixed; inset: 0; background: rgba(4,5,6,0.75);
-      align-items: center; justify-content: center; z-index: 10; backdrop-filter: blur(2px);
-    }
-    #modal-box {
-      background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
-      width: min(720px, 92vw); max-height: 82vh; display: flex; flex-direction: column;
-      overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,0.5);
-    }
-    #modal-title { padding: 14px 20px; font-weight: 700; font-family: var(--mono); font-size: 0.88rem; border-bottom: 1px solid var(--border); }
-    #modal-body {
-      padding: 18px 20px; overflow-y: auto; white-space: pre-wrap;
-      font-family: var(--mono); font-size: 0.81rem; line-height: 1.6;
-    }
-    #modal-close { position: absolute; top: 10px; right: 16px; background: none; color: var(--text-faint); }
-
-    .flag-row {
-      border-bottom: 1px solid var(--border); padding: 14px 0; display: flex;
-      flex-direction: column; gap: 8px;
-    }
-    .flag-row:last-child { border-bottom: none; }
-    .flag-prompt { font-size: 0.88rem; line-height: 1.4; font-family: var(--sans); }
-    .flag-input-row { display: flex; gap: 8px; align-items: center; }
-    .flag-input-row input {
-      flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
-      padding: 8px 10px; color: var(--text); font-family: var(--sans); font-size: 0.84rem;
-    }
-    .flag-input-row input.correct { border-color: var(--good); }
-    .flag-status { font-size: 1rem; width: 20px; text-align: center; }
-    .flag-status.correct { color: var(--good); }
-    .flag-status.wrong { color: var(--bad); }
-    .flag-hint { font-size: 0.76rem; color: var(--text-faint); font-family: var(--sans); }
-    .flag-hint button.link { color: var(--text-faint); text-decoration: underline; }
-  </style>
+  <title>Cedar Hollow OT Range — Control Panel</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
 <body>
-  <header>
-    <div class="brand">
-      <svg width="24" height="24" viewBox="0 0 28 28">
-        <polygon points="14,2 24,8 24,20 14,26 4,20 4,8" fill="none" stroke="var(--accent)" stroke-width="2"/>
-        <circle cx="14" cy="14" r="3.2" fill="var(--accent)"/>
-      </svg>
-      <span class="wordmark">OT_RANGE</span>
-      <span class="tagline">control panel</span>
-    </div>
-    <div class="spacer"></div>
-    <div class="flags-chip">🏁 <b id="flags-total">— / —</b></div>
-  </header>
-
-  <main>
-    <div class="security-note">
-      Simulated environment — see
-      <a href="https://github.com/Kahler2315/ot-range/blob/master/SECURITY.md" target="_blank">SECURITY.md</a>.
-      Every action here runs a command already documented in the README.
-    </div>
-
-    <div class="control-strip">
-      <div class="btn-row">
-        <button class="btn-primary" id="btn-up">Bring up</button>
-        <button class="btn-warn" id="btn-reset">Reset</button>
-        <button class="btn-danger" id="btn-down">Down</button>
-        <button class="btn-ghost" id="btn-refresh">↻</button>
+  <div class="app-shell">
+    <nav class="sidebar" aria-label="Main navigation">
+      <div class="sidebar-brand">
+        <svg class="mark" width="30" height="30" viewBox="0 0 32 32" aria-hidden="true">
+          <path d="M16 3 L27 9.5 V22.5 L16 29 L5 22.5 V9.5 Z" fill="none" stroke="var(--accent)" stroke-width="1.6"/>
+          <path d="M16 11 V21 M11.5 13.5 L20.5 18.5 M20.5 13.5 L11.5 18.5" stroke="var(--accent)" stroke-width="1.4" stroke-linecap="round"/>
+          <circle cx="16" cy="16" r="2.4" fill="var(--accent)"/>
+        </svg>
+        <span class="brand-text">Cedar Hollow<br><b>OT Range</b></span>
       </div>
-      <span class="busy-note" id="busy-note">running — see console ↓</span>
-      <div class="strip-sep"></div>
-      <div class="status-groups" id="status-groups">
-        <span class="status-empty">loading…</span>
+      <ul class="sidebar-nav">
+        <li><a href="#overview" class="nav-link" data-nav="overview">Overview</a></li>
+        <li><a href="#scenarios" class="nav-link" data-nav="scenarios">Scenarios</a></li>
+        <li><a href="#plant-services" class="nav-link" data-nav="plant-services">Plant Services</a></li>
+        <li><a href="#progress" class="nav-link" data-nav="progress">Investigation Progress</a></li>
+        <li><a href="#network-map" class="nav-link" data-nav="network-map">Network Map</a></li>
+        <li><a href="#console-section" class="nav-link" data-nav="console-section">Console</a></li>
+      </ul>
+      <div class="sidebar-footer">
+        <a href="https://github.com/Kahler2315/ot-range/blob/master/SECURITY.md" target="_blank" rel="noopener">SECURITY.md</a>
       </div>
-    </div>
+    </nav>
 
-    <div class="eyebrow">Scenarios</div>
-    <div class="scenario-list">
-      {% for s in scenarios %}
-      <div class="scenario-row" data-scenario="{{ s.id }}">
-        <div class="scenario-row-head" data-toggle="{{ s.id }}">
-          <span class="chevron">▸</span>
-          <span class="sid">{{ s.id }}</span>
-          <span class="stitle">{{ s.title }}</span>
-          <span class="row-hook">{{ s.hook }}</span>
-          <span class="row-flags" data-flag-count="{{ s.id }}">—</span>
+    <div class="main-area">
+      <header class="app-header">
+        <button class="btn-ghost mobile-menu-btn" id="mobile-menu-btn" aria-label="Toggle navigation menu">☰</button>
+        <div class="header-readiness">
+          <span class="readiness-dot" id="readiness-dot"></span>
+          <span id="readiness-word">Loading</span>
         </div>
-        <div class="scenario-row-body" id="body-{{ s.id }}" hidden>
-          <div class="meta">{{ s.hook }}</div>
-          <div class="meta"><b>Impact:</b> {{ s.impact }}</div>
-          <div class="meta"><b>Caught by:</b> {{ s.caught_by }}</div>
-          <div class="row">
-            <select data-scenario="{{ s.id }}">
-              {% for m in s.modes %}
-              <option value="{{ loop.index0 }}">{{ m.label }}</option>
+        <span class="header-busy" id="header-busy" hidden>Busy — job running</span>
+        <div class="spacer"></div>
+        <div class="header-flags"><span aria-hidden="true">🏁</span> <b id="flags-total">— / —</b> flags</div>
+      </header>
+
+      <main class="workspace" id="main-content">
+        <section id="overview" class="workspace-section" aria-labelledby="overview-heading">
+          <h1 id="overview-heading">Cedar Hollow OT Cyber Range</h1>
+          <p class="lede">
+            Bring the plant online, launch attack scenarios against a real
+            OpenPLC controller, inspect what the sensor caught, and complete
+            scored investigation flags. Simulated environment only — see
+            <a href="https://github.com/Kahler2315/ot-range/blob/master/SECURITY.md" target="_blank" rel="noopener">SECURITY.md</a>.
+          </p>
+
+          <div class="readiness-card">
+            <div class="readiness-main">
+              <div class="readiness-badge" id="readiness-badge">
+                <span class="readiness-dot large" id="readiness-dot-2"></span>
+                <span id="readiness-word-2">Loading</span>
+              </div>
+              <div class="readiness-metrics" id="readiness-metrics">
+                <div class="metric"><span class="metric-value" id="metric-containers">—</span><span class="metric-label">containers healthy</span></div>
+                <div class="metric"><span class="metric-value" id="metric-interfaces">—</span><span class="metric-label">interfaces reachable</span></div>
+                <div class="metric"><span class="metric-value" id="metric-scenarios">—</span><span class="metric-label">scenarios available</span></div>
+                <div class="metric"><span class="metric-value" id="metric-flags">—</span><span class="metric-label">flags completed</span></div>
+              </div>
+            </div>
+            <div class="readiness-actions">
+              <button class="btn-primary" id="btn-up">Start Range</button>
+              <button class="btn-ghost" id="btn-refresh" aria-label="Refresh status">↻ Refresh</button>
+              <button class="btn-secondary-warn" id="btn-reset">Reset Range</button>
+              <button class="btn-secondary-danger" id="btn-down">Stop Range</button>
+            </div>
+            <p class="busy-note" id="busy-note" hidden>A command is already running — see the console.</p>
+          </div>
+
+          <details class="about-range">
+            <summary>About this range</summary>
+            <div class="about-body">
+              <p><b>Training purpose:</b> hands-on detection and investigation practice against a real OT/ICS stack — a simulated water pump station modeled on real, public 2026 water-sector incidents, not invented threats.</p>
+              <p><b>Intended audience:</b> university cybersecurity programs, corporate security training teams, OT asset owners, cyber range instructors, and self-study learners.</p>
+              <p><b>Safety limitations:</b> simulated environment only. Attack tooling is hard-bound to this range's own address space — see <a href="https://github.com/Kahler2315/ot-range/blob/master/SECURITY.md" target="_blank" rel="noopener">SECURITY.md</a>. Never point anything here at real equipment.</p>
+              <p><b>Supported scenarios:</b> {{ scenarios|length }} — recon, unauthorized command, manipulation of view, and PLC logic modification. See <a href="https://github.com/Kahler2315/ot-range/blob/master/docs/coverage-matrix.md" target="_blank" rel="noopener">coverage-matrix.md</a> for exactly what's detected and what isn't.</p>
+              <p><b>Local-only architecture:</b> this control panel binds to 127.0.0.1 only and never leaves your machine. Progress and scoring live in your browser's local storage — see the Investigation Progress section.</p>
+              <p><b>Licensing:</b> Apache-2.0 for all original code; third-party components (OpenPLC, Zeek, Suricata, Grafana) retain their own licenses — see <a href="https://github.com/Kahler2315/ot-range/blob/master/docs/licenses.md" target="_blank" rel="noopener">docs/licenses.md</a>.</p>
+              <p><b>Model fidelity:</b> the simulated process is educational, not an engineering-accurate hydraulic model — tank/pump/demand numbers are tuned to be legible on a dashboard, not for real process engineering analysis.</p>
+              <p class="local-progress-note"><b>Local training progress only:</b> completion reports generated here are stored in your browser and are not tamper-resistant or suitable as formal certification evidence.</p>
+            </div>
+          </details>
+        </section>
+
+        <section id="plant-services" class="workspace-section" aria-labelledby="services-heading">
+          <h2 id="services-heading">Plant Services</h2>
+          <div class="service-groups" id="service-groups">
+            <p class="status-empty">Loading…</p>
+          </div>
+        </section>
+
+        <section id="scenarios" class="workspace-section" aria-labelledby="scenarios-heading">
+          <h2 id="scenarios-heading">Scenarios</h2>
+          <div class="scenario-grid">
+            {% for s in scenarios %}
+            <article class="scenario-card" data-scenario="{{ s.id }}" tabindex="0" role="button"
+                      aria-label="Open scenario {{ s.id }}: {{ s.title }}">
+              <div class="scenario-card-top">
+                <span class="scenario-icon" aria-hidden="true">
+                  {% if s.id == 'S01' %}
+                  <svg viewBox="0 0 24 24" width="28" height="28"><circle cx="10" cy="10" r="6" fill="none" stroke="currentColor" stroke-width="1.6"/><line x1="14.5" y1="14.5" x2="20" y2="20" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+                  {% elif s.id == 'S03' %}
+                  <svg viewBox="0 0 24 24" width="28" height="28"><circle cx="12" cy="14" r="7" fill="none" stroke="currentColor" stroke-width="1.6"/><line x1="12" y1="4" x2="12" y2="11" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+                  {% elif s.id == 'S05' %}
+                  <svg viewBox="0 0 24 24" width="28" height="28"><path d="M2 12 Q12 3 22 12 Q12 21 2 12 Z" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.6"/><line x1="4" y1="20" x2="20" y2="4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+                  {% else %}
+                  <svg viewBox="0 0 24 24" width="28" height="28"><rect x="7" y="7" width="10" height="10" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/><line x1="9" y1="2" x2="9" y2="7" stroke="currentColor" stroke-width="1.6"/><line x1="15" y1="2" x2="15" y2="7" stroke="currentColor" stroke-width="1.6"/><line x1="9" y1="17" x2="9" y2="22" stroke="currentColor" stroke-width="1.6"/><line x1="15" y1="17" x2="15" y2="22" stroke="currentColor" stroke-width="1.6"/><line x1="4" y1="12" x2="1" y2="12" stroke="#ef5b5b" stroke-width="2" stroke-linecap="round"/></svg>
+                  {% endif %}
+                </span>
+                <span class="sid">{{ s.id }}</span>
+                <span class="severity severity-{{ s.severity }}">{{ s.severity }}</span>
+              </div>
+              <h3>{{ s.title }}</h3>
+              <p class="hook">{{ s.hook }}</p>
+              <p class="meta-line"><b>Impact:</b> {{ s.impact }}</p>
+              <p class="meta-line"><b>Caught by:</b> {{ s.caught_by }}</p>
+              <div class="scenario-card-footer">
+                <span class="lifecycle-badge" data-lifecycle="{{ s.id }}">Not started</span>
+                <span class="flag-progress" data-flag-count="{{ s.id }}">— flags</span>
+              </div>
+              <button class="btn-primary open-scenario-btn" data-scenario="{{ s.id }}">Open scenario</button>
+            </article>
+            {% endfor %}
+          </div>
+        </section>
+
+        <section id="progress" class="workspace-section" aria-labelledby="progress-heading">
+          <h2 id="progress-heading">Investigation Progress</h2>
+          <div class="progress-summary" id="progress-summary"></div>
+          <div class="progress-table-wrap">
+            <table class="progress-table" id="progress-table">
+              <thead>
+                <tr><th>Scenario</th><th>Status</th><th>Mode</th><th>Flags</th><th>Score</th><th>Hints</th><th></th></tr>
+              </thead>
+              <tbody id="progress-table-body"></tbody>
+            </table>
+          </div>
+          <div class="report-actions">
+            <button class="btn-ghost" id="export-course-json">Export course report (JSON)</button>
+            <button class="btn-ghost" id="export-course-print">Printable course report</button>
+          </div>
+
+          <details class="instructor-panel">
+            <summary>Instructor settings</summary>
+            <div class="instructor-body" id="instructor-body">
+              <p class="instructor-warning">
+                This is a <b>local convenience lock</b>, not real
+                authentication — anyone with browser access to this
+                machine can clear it. Do not rely on it to prevent
+                students from changing settings if that matters for
+                your use case.
+              </p>
+              <div id="instructor-locked-view">
+                <label class="field-label" for="instructor-passphrase-input">Passphrase (leave blank if none set)</label>
+                <div class="row">
+                  <input type="password" id="instructor-passphrase-input" placeholder="passphrase">
+                  <button class="btn-primary" id="instructor-unlock-btn">Unlock settings</button>
+                </div>
+              </div>
+              <div id="instructor-settings-view" hidden></div>
+            </div>
+          </details>
+        </section>
+
+        <section id="network-map" class="workspace-section" aria-labelledby="map-heading">
+          <h2 id="map-heading">Network Map</h2>
+          <div class="map-toolbar">
+            <label class="field-label" for="map-scenario-select">Scenario overlay</label>
+            <select id="map-scenario-select">
+              <option value="">None</option>
+              {% for s in scenarios %}
+              <option value="{{ s.id }}">{{ s.id }} — {{ s.title }}</option>
               {% endfor %}
             </select>
-            <button class="btn-primary run-btn" data-scenario="{{ s.id }}">Run</button>
+            <button class="btn-ghost" id="map-toggle-ports">Ports/protocols: on</button>
+            <button class="btn-ghost" id="map-reset-view">Reset view</button>
+            <button class="btn-ghost" id="map-refresh-health">↻ Health</button>
           </div>
-          <div class="doc-links">
-            <a data-scenario="{{ s.id }}" data-doc="briefing">Briefing</a>
-            <a data-scenario="{{ s.id }}" data-doc="answer-key">Answer key</a>
-            <a data-scenario="{{ s.id }}" data-doc="detection">Detection</a>
-            <a data-scenario="{{ s.id }}" data-doc="expected-impact">Expected impact</a>
-            <button class="link flags-link" data-scenario="{{ s.id }}">🏁 Flags</button>
+          <div class="map-canvas-wrap" id="map-canvas-wrap">
+            <svg id="map-svg" viewBox="0 0 900 460" role="group" aria-label="Range network topology" tabindex="0"></svg>
           </div>
+          <div class="map-legend" aria-hidden="false">
+            <span class="legend-item"><span class="legend-swatch legend-normal"></span>Normal traffic</span>
+            <span class="legend-item"><span class="legend-swatch legend-attack"></span>Attack path</span>
+            <span class="legend-item"><span class="legend-swatch legend-monitored"></span>Monitored path</span>
+            <span class="legend-item"><span class="legend-swatch legend-unmonitored"></span>Unmonitored path</span>
+            <span class="legend-item"><span class="legend-dot legend-ok"></span>Healthy service</span>
+            <span class="legend-item"><span class="legend-dot legend-bad"></span>Offline service</span>
+            <span class="legend-item"><span class="legend-dot legend-affected"></span>Affected asset</span>
+            <span class="legend-item"><span class="legend-dot legend-detect"></span>Detection point</span>
+          </div>
+          <div class="map-node-detail" id="map-node-detail" hidden></div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <!-- scenario detail drawer -->
+  <div class="drawer-overlay" id="drawer-overlay" hidden>
+    <aside class="drawer" id="scenario-drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title">
+      <button class="drawer-close" id="drawer-close" aria-label="Close scenario detail">✕</button>
+      <div id="drawer-content"></div>
+    </aside>
+  </div>
+
+  <!-- document viewer modal -->
+  <div class="modal-overlay" id="modal-overlay" hidden>
+    <div class="modal-box" id="modal-box" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <div class="modal-header">
+        <div>
+          <div class="modal-title" id="modal-title"></div>
+          <div class="modal-subtitle" id="modal-subtitle"></div>
+        </div>
+        <div class="modal-header-actions">
+          <button class="btn-ghost" id="modal-copy">Copy text</button>
+          <button class="btn-ghost" id="modal-close" aria-label="Close document">✕</button>
         </div>
       </div>
-      {% endfor %}
-    </div>
-  </main>
-
-  <div id="modal-overlay">
-    <div id="modal-box" style="position: relative;">
-      <button id="modal-close">✕</button>
-      <div id="modal-title"></div>
-      <div id="modal-body"></div>
+      <div class="modal-body" id="modal-body"></div>
     </div>
   </div>
 
-  <div id="console-wrap">
-    <div id="console-header">
-      <span id="console-title">running…</span>
-      <span class="status-badge running" id="console-badge">running</span>
-      <button id="console-close">✕</button>
+  <!-- custom confirm dialog (replaces window.confirm everywhere) -->
+  <div class="dialog-overlay" id="dialog-overlay" hidden>
+    <div class="dialog-box" id="dialog-box" role="alertdialog" aria-modal="true" aria-labelledby="dialog-title" aria-describedby="dialog-message">
+      <div class="dialog-title" id="dialog-title"></div>
+      <p class="dialog-message" id="dialog-message"></p>
+      <div class="dialog-actions">
+        <button class="btn-ghost" id="dialog-cancel"></button>
+        <button class="btn-primary" id="dialog-confirm"></button>
+      </div>
     </div>
-    <div id="console-body"></div>
   </div>
 
-  <script src="{{ url_for('static', filename='app.js') }}"></script>
+  <!-- live execution console drawer -->
+  <div class="console-drawer" id="console-wrap" hidden>
+    <div class="console-header" id="console-header">
+      <button class="console-collapse-btn" id="console-collapse" aria-label="Collapse console">▾</button>
+      <span class="console-title" id="console-title">idle</span>
+      <span class="status-badge" id="console-badge">idle</span>
+      <span class="console-elapsed" id="console-elapsed"></span>
+      <div class="spacer"></div>
+      <label class="console-autoscroll"><input type="checkbox" id="console-autoscroll" checked> Autoscroll</label>
+      <button class="btn-ghost" id="console-clear">Clear</button>
+      <button class="btn-ghost" id="console-close" aria-label="Close console">✕</button>
+    </div>
+    <div class="console-body" id="console-body" role="log" aria-live="polite"></div>
+  </div>
+
+  <div id="scenarios-data" hidden>{{ scenarios | tojson }}</div>
+  <div id="solution-docs-data" hidden>{{ solution_docs | tojson }}</div>
+
+  <script type="module" src="{{ url_for('static', filename='app.js') }}"></script>
 </body>
 </html>
