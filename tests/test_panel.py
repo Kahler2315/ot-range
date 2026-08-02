@@ -143,9 +143,9 @@ def test_api_run_rejects_unknown_mode_index(client):
 
 def test_sidebar_nav_targets_all_resolve(client):
     # Every sidebar nav-link's data-nav must be either a real element
-    # id on the page (so IntersectionObserver-based scroll-highlight
-    # can actually track it) or "console" (the one nav item that opens
-    # the fixed console drawer directly instead of scrolling, wired
+    # id on the page (so the scroll-position highlight can track it) or
+    # "console" (the one nav item that opens the fixed console drawer
+    # directly instead of scrolling, wired
     # explicitly in app.js's wireSidebarNav). A link pointing at
     # neither can never highlight or navigate anywhere — this caught a
     # real bug where "Console" pointed at a nonexistent
@@ -159,3 +159,20 @@ def test_sidebar_nav_targets_all_resolve(client):
         assert re.search(rf'id="{re.escape(target)}"', html), (
             f"no element with id={target!r} for nav target"
         )
+
+
+def test_sidebar_scroll_links_follow_workspace_section_order(client):
+    """The visible navigation order should match the page's reading order."""
+    html = client.get("/").get_data(as_text=True)
+    nav_targets = re.findall(r'class="nav-link"[^>]*data-nav="([^"]+)"', html)
+    scroll_targets = [target for target in nav_targets if target != "console"]
+    section_targets = re.findall(r'<section id="([^"]+)" class="workspace-section"', html)
+    assert scroll_targets == section_targets
+
+
+def test_map_overlay_warning_is_dismissible(client):
+    html = client.get("/").get_data(as_text=True)
+    assert 'id="map-overlay-locked-note"' in html
+    assert 'id="map-overlay-locked-message"' in html
+    assert 'id="map-overlay-locked-close"' in html
+    assert 'aria-label="Dismiss scenario overlay warning"' in html

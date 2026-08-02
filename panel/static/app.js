@@ -611,20 +611,26 @@ function isOverlayUnlocked(scenarioId) {
 function tryShowMapOverlay(scenarioId) {
   const select = document.getElementById("map-scenario-select");
   const note = document.getElementById("map-overlay-locked-note");
+  const message = document.getElementById("map-overlay-locked-message");
   if (!scenarioId) {
     select.value = "";
     note.hidden = true;
+    message.textContent = "";
     setMapOverlay(null);
     return;
   }
   if (isOverlayUnlocked(scenarioId)) {
     select.value = scenarioId;
     note.hidden = true;
+    message.textContent = "";
     setMapOverlay(scenarioId);
   } else {
-    select.value = "";
+    // Keep the locked scenario selected. Resetting the select to None
+    // here left the warning visible while None was already selected,
+    // so choosing None could not fire another change event to clear it.
+    select.value = scenarioId;
     note.hidden = false;
-    note.textContent =
+    message.textContent =
       `${scenarioId}'s attack-path overlay is hidden until that attempt is complete or its solution is revealed — showing it now would hand you the investigation. Open the scenario and investigate normally; the overlay unlocks automatically once you're done, or switch to guided mode for more scaffolding up front.`;
     setMapOverlay(null);
   }
@@ -632,6 +638,7 @@ function tryShowMapOverlay(scenarioId) {
 
 function wireMapControls() {
   document.getElementById("map-scenario-select").addEventListener("change", (ev) => tryShowMapOverlay(ev.target.value));
+  document.getElementById("map-overlay-locked-close").addEventListener("click", () => tryShowMapOverlay(""));
   document.getElementById("map-toggle-ports").addEventListener("click", (ev) => {
     const showing = toggleMapPorts();
     ev.target.textContent = `Ports/protocols: ${showing ? "on" : "off"}`;
@@ -651,9 +658,14 @@ function wireSidebarNav() {
   const consoleLink = document.getElementById("nav-console-link");
   const allLinks = [...document.querySelectorAll(".nav-link")];
   const scrollLinks = allLinks.filter((l) => l !== consoleLink);
-  const sections = scrollLinks
-    .map((l) => ({ link: l, el: document.getElementById(l.dataset.nav) }))
-    .filter((s) => s.el);
+  const linksByTarget = new Map(scrollLinks.map((link) => [link.dataset.nav, link]));
+  // Scroll-position comparisons must follow page order, not sidebar
+  // order. Those currently differ for Plant Services and Scenarios;
+  // walking the links made Plant Services overwrite Scenarios after
+  // both section tops had crossed the reference line.
+  const sections = [...document.querySelectorAll(".workspace-section")]
+    .map((el) => ({ link: linksByTarget.get(el.id), el }))
+    .filter((s) => s.link);
 
   function setActive(link) {
     allLinks.forEach((l) => l.classList.toggle("active", l === link));
@@ -724,6 +736,13 @@ function wireSidebarNav() {
     wrap.classList.remove("collapsed");
     setActive(consoleLink);
     document.querySelector(".sidebar").classList.remove("open");
+  });
+
+  // Console is a drawer rather than a page section. Once it closes,
+  // restore the highlight for the section still visible underneath.
+  document.getElementById("console-close").addEventListener("click", () => {
+    const current = sectionForScrollPosition();
+    if (current) setActive(current.link);
   });
 
   document.getElementById("mobile-menu-btn")?.addEventListener("click", () => {

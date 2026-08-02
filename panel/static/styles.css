@@ -273,6 +273,11 @@ select, input[type="text"], input[type="password"] {
   border-radius: var(--radius-sm); padding: var(--sp-3); font-size: var(--fs-sm); margin-top: var(--sp-3);
   display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap;
 }
+.prereq-banner[hidden] { display: none; }
+.banner-dismiss {
+  margin-left: auto; padding: 2px 7px; min-height: unset; background: transparent;
+  color: currentColor; border: 1px solid currentColor; border-radius: var(--radius-sm);
+}
 .doc-tabs { display: flex; gap: var(--sp-2); flex-wrap: wrap; }
 .doc-tab {
   background: var(--panel-2); color: var(--text-dim); border: 1px solid var(--border); border-radius: var(--radius-sm);
