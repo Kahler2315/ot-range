@@ -78,14 +78,14 @@ prerequisite either way is [Docker Desktop](https://www.docker.com/products/dock
 with WSL2 enabled — Docker Desktop needs this on Windows regardless,
 and this range's `router` container needs raw packet capture, a
 Linux-container thing no matter how it's packaged. Given that,
-download **`OT-Range-Setup.exe`** from the
-[latest `windows-installer` run's artifacts](https://github.com/Kahler2315/ot-range/actions/workflows/windows-installer.yml)
-(no Releases page yet — grab it from the most recent successful run)
-and run it. No admin rights needed. It adds a **Start Menu and Desktop
-shortcut** that clones/updates the repo inside WSL and launches the
-control panel automatically — double-click the icon, the browser opens,
-that's it. Source: [`installer/ot-range.iss`](installer/ot-range.iss)
-(built with [Inno Setup](https://jrsoftware.org/isinfo.php)).
+download **[`OT-Range-Setup.exe`](https://github.com/Kahler2315/ot-range/releases/download/latest/OT-Range-Setup.exe)**
+(a public link, no GitHub login needed — auto-rebuilt from `master` on
+every installer change) and run it. No admin rights needed. It adds a
+**Start Menu and Desktop shortcut** that clones/updates the repo inside
+WSL and launches the control panel automatically — double-click the
+icon, the browser opens, that's it. Source:
+[`installer/ot-range.iss`](installer/ot-range.iss) (built with
+[Inno Setup](https://jrsoftware.org/isinfo.php)).
 
 Two things to know going in: it's unsigned (no paid code-signing
 certificate), so Windows SmartScreen will show "Windows protected your

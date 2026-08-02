@@ -13,7 +13,7 @@ on:
   workflow_dispatch: {}
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -39,3 +39,21 @@ jobs:
           name: OT-Range-Setup
           path: installer\dist\OT-Range-Setup.exe
           if-no-files-found: error
+
+      # Actions artifacts require a logged-in GitHub session to
+      # download, even on a public repo — a real barrier for anyone
+      # (a school, a company) just trying to grab an installer. A
+      # rolling "latest" pre-release is a normal public URL, no login.
+      # Only on push (not pull_request — a PR shouldn't publish a
+      # release, and forked-PR runs don't get write access anyway).
+      - name: Publish/update the "latest" release
+        if: github.event_name == 'push'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete latest --yes --cleanup-tag || true
+          gh release create latest installer/dist/OT-Range-Setup.exe \
+            --title "OT Range Windows installer (latest)" \
+            --notes "Auto-built from the current master branch on every installer change. Compiled and validated on GitHub's real windows-latest runners; NOT run end-to-end on a physical Windows machine with WSL2 + Docker Desktop — see docs/limitations.md and installer/ot-range.iss's header for exactly what that means." \
+            --prerelease
