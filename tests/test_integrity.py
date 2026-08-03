@@ -118,8 +118,7 @@ def test_integrity_events_are_instructor_only_and_acknowledgment_persists(studen
 
     assert student_client.get("/api/instructor/integrity-events").status_code == 401
     assert (
-        student_client.post("/api/instructor/setup", json={"password": PASSWORD}).status_code
-        == 201
+        student_client.post("/api/instructor/setup", json={"password": PASSWORD}).status_code == 201
     )
     events = student_client.get("/api/instructor/integrity-events").get_json()["events"]
     reset_event = next(event for event in events if event["event_type"] == "attempt_reset")
@@ -135,9 +134,10 @@ def test_integrity_events_are_instructor_only_and_acknowledgment_persists(studen
     with panel_app.app.app_context():
         storage = Storage(panel_app.get_storage().path)
         persisted = storage.list_training_events(integrity_only=True)
-    assert next(event for event in persisted if event["id"] == reset_event["id"])[
-        "acknowledged"
-    ] is True
+    assert (
+        next(event for event in persisted if event["id"] == reset_event["id"])["acknowledged"]
+        is True
+    )
 
 
 def test_training_event_details_never_store_submitted_answer(student_client):
@@ -172,9 +172,7 @@ def test_status_degrades_cleanly_when_docker_executable_is_missing(panel_client,
 
 
 def test_scenario_execution_is_linked_to_current_attempt(student_client, monkeypatch):
-    monkeypatch.setattr(
-        panel_app, "start_job", lambda _command, **_kwargs: "fixed-job-id"
-    )
+    monkeypatch.setattr(panel_app, "start_job", lambda _command, **_kwargs: "fixed-job-id")
     monkeypatch.setattr(
         panel_app,
         "register_job_completion",
@@ -200,9 +198,7 @@ def test_scenario_execution_is_linked_to_current_attempt(student_client, monkeyp
             "started_at": state["executions"][0]["started_at"],
         }
     ]
-    report = student_client.get(
-        f"/api/profiles/{student_client.profile['id']}/export"
-    ).get_json()
+    report = student_client.get(f"/api/profiles/{student_client.profile['id']}/export").get_json()
     scenario = next(item for item in report["scenarios"] if item["scenario"] == "S01")
     assert scenario["practicalExecutionVerified"] is True
     assert scenario["completionClaim"] == "scenario_run_verified"

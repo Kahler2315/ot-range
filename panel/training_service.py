@@ -511,9 +511,7 @@ class TrainingService:
             )
         history = self.storage.list_attempt_history(profile_id, scenario.id)
         history_reports = [self._attempt_report(item, scenario) for item in history]
-        historical_scores = [
-            item["score"] for item in history_reports if item["score"] is not None
-        ]
+        historical_scores = [item["score"] for item in history_reports if item["score"] is not None]
         result = {
             "scenario": scenario.id,
             "scenarioTitle": scenario.title,

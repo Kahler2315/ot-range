@@ -316,7 +316,7 @@ FLAGS_BY_SCENARIO: dict[str, list[Flag]] = {
                 Hint("Identify LT_101's register table in plc/modbus-map.yml first."),
                 Hint(
                     "Filter request records for LT_101's address and inspect the "
-                    "numeric func field: `jq 'select(.pdu_type==\"request\" and "
+                    'numeric func field: `jq \'select(.pdu_type=="request" and '
                     ".address==0) | .func' logs/modbus.log | sort -u`."
                 ),
             ],

@@ -851,9 +851,7 @@ class Storage:
         return uuid.uuid4().hex
 
     @staticmethod
-    def _next_attempt_number(
-        conn: sqlite3.Connection, profile_id: str, scenario_id: str
-    ) -> int:
+    def _next_attempt_number(conn: sqlite3.Connection, profile_id: str, scenario_id: str) -> int:
         row = conn.execute(
             """SELECT COALESCE(MAX(attempt_number), 0) + 1
                FROM scenario_attempts WHERE profile_id = ? AND scenario_id = ?""",
@@ -1306,9 +1304,7 @@ class Storage:
                 (profile_id,),
             ).fetchall()
             for attempt in attempts:
-                self._reset_attempt_in_connection(
-                    conn, attempt, actor_type=actor_type, now=now
-                )
+                self._reset_attempt_in_connection(conn, attempt, actor_type=actor_type, now=now)
             self._insert_training_event(
                 conn,
                 profile_id=profile_id,
@@ -1363,18 +1359,22 @@ class Storage:
             clauses.append("a.event_id IS NULL")
         where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
         params.append(max(1, min(int(limit), 1000)))
+        # `where`'s clauses are fixed literal fragments ("e.profile_id =
+        # ?", a static IN(...) of a fixed-size placeholder list,
+        # "a.event_id IS NULL") built above — every actual value flows
+        # through `params` as a `?` placeholder, never string-interpolated.
+        query = (
+            "SELECT e.id, e.profile_id, p.display_name, e.attempt_id, "  # noqa: S608 # nosec B608
+            "e.scenario_id, e.event_type, e.actor_type, e.occurred_at, "
+            "e.details, a.acknowledged_at "
+            "FROM training_events e "
+            "JOIN profiles p ON p.id = e.profile_id "
+            "LEFT JOIN training_event_acknowledgments a ON a.event_id = e.id "
+            f"{where} "
+            "ORDER BY e.id DESC LIMIT ?"
+        )
         with self.connection() as conn:
-            rows = conn.execute(
-                f"""SELECT e.id, e.profile_id, p.display_name, e.attempt_id,
-                           e.scenario_id, e.event_type, e.actor_type, e.occurred_at,
-                           e.details, a.acknowledged_at
-                    FROM training_events e
-                    JOIN profiles p ON p.id = e.profile_id
-                    LEFT JOIN training_event_acknowledgments a ON a.event_id = e.id
-                    {where}
-                    ORDER BY e.id DESC LIMIT ?""",  # noqa: S608 -- clauses are fixed internally
-                params,
-            ).fetchall()
+            rows = conn.execute(query, params).fetchall()
         events = []
         for row in rows:
             item = dict(row)
